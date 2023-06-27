@@ -25,7 +25,7 @@ class LiveDataCollector(RosNode):
             }
             return d
         self._messages = {
-            "drive_request" : _message_description("/ugrdv/drive_request", ugrdv_msgs.DriveRequest),
+            "drive_request" : _message_description("/ugrdv/cmd", ugrdv_msgs.DriveRequest),
             "car_request" : _message_description("/ugrdv/car_request", ugrdv_msgs.CarRequest),
             "path_planning_path_velocity_request" : _message_description("/ugrdv/path_velocity_request", ugrdv_msgs.PathVelocityRequest),
             "mission_path_velocity_request" : _message_description("/ugrdv/mission_path_velocity_request", ugrdv_msgs.PathVelocityRequest),
