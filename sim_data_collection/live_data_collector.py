@@ -39,6 +39,8 @@ class LiveDataCollector(RosNode):
         # use the topic names in self._messages as a default
         self._param_names_and_values = {
             f"{id}_topic" : data["topic"] for (id,data) in self._messages.items()
+        } | {
+            "database" : "database.db3"
         }
 
         # declare through ros
@@ -70,3 +72,6 @@ class LiveDataCollector(RosNode):
                 data["callbacks"].append(fn)
         else:
             self._messages[id]["callbacks"].append(fn)
+
+    def get_params(self):
+        return self._param_names_and_values

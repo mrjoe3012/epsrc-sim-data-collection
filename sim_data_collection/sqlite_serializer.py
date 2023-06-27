@@ -13,6 +13,8 @@ class SQLiteSerializer:
 
     def open(self, path):
         assert self._open == False
+        if self._verbose == True:
+            self._logger.info(f"Attempting to open database '{path}'")
         self._connection = db.connect(path)
         self._open = True
 

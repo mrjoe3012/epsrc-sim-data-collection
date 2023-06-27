@@ -1,13 +1,20 @@
-import rclpy
+import rclpy, os
 from sim_data_collection.live_data_collector import LiveDataCollector as Node
 from sim_data_collection.sqlite_serializer import SQLiteSerializer as Serializer
+from ament_index_python import get_package_share_directory
+
+package_name = "sim_data_collection"
 
 def main():
     try:
         rclpy.init()
         node = Node()
         serializer = Serializer(verbose=True)
-        serializer.open("database.db3")
+        db_path = os.path.join(
+            get_package_share_directory(package_name),
+            node.get_params()["database"]
+        )
+        serializer.open(db_path)
         serializer.create_new_database()
         node.register_callback("all", serializer.serialize_message)
         rclpy.spin(node)
