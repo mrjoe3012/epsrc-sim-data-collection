@@ -6,7 +6,7 @@ def main():
     try:
         rclpy.init()
         node = Node()
-        serializer = Serializer()
+        serializer = Serializer(verbose=True)
         serializer.open("database.db3")
         serializer.create_new_database()
         node.register_callback("all", serializer.serialize_message)
