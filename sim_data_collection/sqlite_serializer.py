@@ -186,4 +186,25 @@ class SQLiteSerializer:
         self._serialize_basic_message(msg, "vcu_status", msg.meta.hash)
 
     def drop_unmet_dependencies(self):
-        pass
+        assert self._open == True
+        queries = (
+            """
+            DELETE FROM path_planning_path_velocity_request
+            WHERE perception_cones NOT IN (SELECT hash FROM perception_cones);
+            """,
+            """
+            DELETE FROM mission_path_velocity_request
+            WHERE path_planning_path_velocity_request NOT IN (SELECT hash FROM path_planning_path_velocity_request);
+            """,
+            """
+            DELETE FROM car_request
+            WHERE mission_path_velocity_request NOT IN (SELECT hash FROM mission_path_velocity_request)
+            OR
+            vcu_status NOT IN (SELECT hash from vcu_status);
+            """,
+            """
+            DELETE FROM drive_request
+            WHERE car_request NOT IN (SELECT hash FROM car_request);
+            """,
+        )
+        for sql in queries: self._connection.execute(sql)
