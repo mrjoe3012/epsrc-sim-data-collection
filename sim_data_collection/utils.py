@@ -23,3 +23,6 @@ def getMessageHashMeta(msg):
     msg.meta.hash = ""
     hash = getMessageHash(msg)
     return hash
+
+def rosTimestampToMillis(stamp):
+    return int(stamp.sec * 1e3 + stamp.nanosec * 1e-6)
