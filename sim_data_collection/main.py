@@ -13,6 +13,7 @@ def main():
         rclpy.spin(node)
         rclpy.shutdown()
     finally:
+        serializer.drop_unmet_dependencies()
         serializer.close()
 
 if __name__ == '__main__':
