@@ -75,18 +75,18 @@ class SQLiteSerializer:
             hash VARCHAR(32) PRIMARY KEY,
             timestamp INT NOT NULL,
             mission_path_velocity_request VARCHAR(32),
-            vcu_status VARCHAR(32),
             data BLOB,
-            FOREIGN KEY (mission_path_velocity_request) REFERENCES mission_path_velocity_request(hash),
-            FOREIGN KEY (vcu_status) REFERENCES vcu_status(hash)
+            FOREIGN KEY (mission_path_velocity_request) REFERENCES mission_path_velocity_request(hash)
         );
         """,
         """
         CREATE TABLE drive_request(
             hash VARCHAR(32) PRIMARY KEY,
             timestamp INT NOT NULL,
+            vcu_status VARCHAR(32),
             car_request VARCHAR(32),
-            FOREIGN KEY(car_request) REFERENCES car_request(hash)
+            FOREIGN KEY(car_request) REFERENCES car_request(hash),
+            FOREIGN KEY(vcu_status) REFERENCES vcu_status(hash)
         );
         """,
         )
@@ -111,27 +111,27 @@ class SQLiteSerializer:
 
     def _serialize_drive_request(self, msg):
         query = """
-        INSERT INTO drive_request(hash, timestamp, car_request, data)
-        VALUES (?, ?, ?, ?);
+        INSERT INTO drive_request(hash, timestamp, vcu_status, car_request, data)
+        VALUES (?, ?, ?, ?, ?);
         """
         params = (
             msg.meta.hash,
             utils.rosTimestampToMillis(msg.header.stamp),
             msg.meta.consumed_messages[0],
+            msg.meta.consumed_messages[1],
             serialize_message(msg)
         )
         self._connection.execute(query, params) 
 
     def _serialize_car_request(self, msg):
         query = """
-        INSERT INTO car_request(hash, timestamp, mission_path_velocity_request, vcu_status, data)
-        VALUES (?, ?, ?, ?, ?);
+        INSERT INTO car_request(hash, timestamp, mission_path_velocity_request, data)
+        VALUES (?, ?, ?, ?);
         """
         params = (
             msg.meta.hash,
             utils.rosTimestampToMillis(msg.header.stamp),
-            msg.consumed_messages[1],
-            msg.consumed_messages[0],
+            msg.meta.consumed_messages[0],
             serialize_message(msg)
         )
         self._connection.execute(query, params)
@@ -141,7 +141,6 @@ class SQLiteSerializer:
         INSERT INTO path_planning_path_velocity_request(hash, timestamp, perception_cones, data)
         VALUES(?, ?, ?, ?);
         """
-        print(msg)
         params = (
             msg.meta.hash,
             utils.rosTimestampToMillis(msg.header.stamp),
@@ -158,7 +157,7 @@ class SQLiteSerializer:
         params = (
             msg.meta.hash,
             utils.rosTimestampToMillis(msg.header.stamp),
-            msg.consumed_messages[0],
+            msg.meta.consumed_messages[0],
             serialize_message(msg)
         )
         self._connection.execute(query, params)
@@ -198,13 +197,13 @@ class SQLiteSerializer:
             """,
             """
             DELETE FROM car_request
-            WHERE mission_path_velocity_request NOT IN (SELECT hash FROM mission_path_velocity_request)
-            OR
-            vcu_status NOT IN (SELECT hash from vcu_status);
+            WHERE mission_path_velocity_request NOT IN (SELECT hash FROM mission_path_velocity_request);
             """,
             """
             DELETE FROM drive_request
-            WHERE car_request NOT IN (SELECT hash FROM car_request);
+            WHERE car_request NOT IN (SELECT hash FROM car_request)
+            OR
+            vcu_status NOT IN (SELECT hash from vcu_status);
             """,
         )
         for sql in queries: self._connection.execute(sql)
