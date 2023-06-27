@@ -29,7 +29,7 @@ class LiveDataCollector(RosNode):
             "car_request" : _message_description("/ugrdv/car_request", ugrdv_msgs.CarRequest),
             "path_planning_path_velocity_request" : _message_description("/ugrdv/path_velocity_request", ugrdv_msgs.PathVelocityRequest),
             "mission_path_velocity_request" : _message_description("/ugrdv/mission_path_velocity_request", ugrdv_msgs.PathVelocityRequest),
-            "perception_cones" : _message_description("/ugrdv/perception/simulated_cones", ugrdv_msgs.Cone3dArray),
+            "perception_cones" : _message_description("/ugrdv/perception/map", ugrdv_msgs.Cone3dArray),
             "ground_truth_cones" : _message_description("/ground_truth/cones", eufs_msgs.ConeArrayWithCovariance),
             "ground_truth_state" : _message_description("/ground_truth/state", eufs_msgs.CarState),
             "vcu_status" : _message_description("/ugrdv/vcu_status", ugrdv_msgs.VCUStatus)
