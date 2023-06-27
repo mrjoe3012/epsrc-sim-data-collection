@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'data_collector = sim_data_collection.data_collector:main'
+            'data_collector = sim_data_collection.main:main'
         ],
     },
 )
