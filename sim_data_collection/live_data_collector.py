@@ -32,6 +32,7 @@ class LiveDataCollector(RosNode):
             "perception_cones" : _message_description("/ugrdv/perception/simulated_cones", ugrdv_msgs.Cone3dArray),
             "ground_truth_cones" : _message_description("/ground_truth/cones", eufs_msgs.ConeArrayWithCovariance),
             "ground_truth_state" : _message_description("/ground_truth/state", eufs_msgs.CarState),
+            "vcu_status" : _message_description("/ugrdv/vcu_status", ugrdv_msgs.VCUStatus)
         }
 
     def _init_params(self):
@@ -60,8 +61,12 @@ class LiveDataCollector(RosNode):
 
     def _fire_callbacks(self, id, msg):
         assert id in self._messages
-        for fn in self._messages[id]["callbacks"]: fn(msg)
+        for fn in self._messages[id]["callbacks"]: fn(id, msg)
 
     def register_callback(self, id, fn):
-        assert id in self._messages
-        self._messages[id]["callbacks"].append(fn)
+        assert id in self._messages or id == "all"
+        if id == "all":
+            for id, data in self._messages.items():
+                data["callbacks"].append(fn)
+        else:
+            self._messages[id]["callbacks"].append(fn)
