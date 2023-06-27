@@ -52,6 +52,43 @@ class SQLiteSerializer:
             data BLOB
         );
         """,
+        """
+        CREATE TABLE path_planning_path_velocity_request(
+            hash VARCHAR(32) PRIMARY KEY,
+            timestamp INT NOT NULL,
+            perception_cones VARCHAR(32),
+            data BLOB,
+            FOREIGN KEY (perception_cones) REFERENCES perception_cones(hash)
+        );
+        """,
+        """
+        CREATE TABLE mission_path_velocity_request(
+            hash VARCHAR(32) PRIMARY KEY,
+            timestamp INT NOT NULL,
+            path_planning_path_velocity_request VARCHAR(32),
+            data BLOB,
+            FOREIGN KEY (path_planning_path_velocity_request) REFERENCES path_planning_path_velocity_request(hash)
+        );
+        """,
+        """
+        CREATE TABLE car_request(
+            hash VARCHAR(32) PRIMARY KEY,
+            timestamp INT NOT NULL,
+            mission_path_velocity_request VARCHAR(32),
+            vcu_status VARCHAR(32),
+            data BLOB,
+            FOREIGN KEY (mission_path_velocity_request) REFERENCES mission_path_velocity_request(hash),
+            FOREIGN KEY (vcu_status) REFERENCES vcu_status(hash)
+        );
+        """,
+        """
+        CREATE TABLE drive_request(
+            hash VARCHAR(32) PRIMARY KEY,
+            timestamp INT NOT NULL,
+            car_request VARCHAR(32),
+            FOREIGN KEY(car_request) REFERENCES car_request(hash)
+        );
+        """,
         )
         for sql in queries: cursor.execute(sql)
 
@@ -73,16 +110,58 @@ class SQLiteSerializer:
             self._logger.error(f"Attempt to add a duplicate message. Exception: {str(e)}")
 
     def _serialize_drive_request(self, msg):
-        pass
+        query = """
+        INSERT INTO drive_request(hash, timestamp, car_request, data)
+        VALUES (?, ?, ?, ?);
+        """
+        params = (
+            msg.meta.hash,
+            utils.rosTimestampToMillis(msg.header.stamp),
+            msg.meta.consumed_messages[0],
+            serialize_message(msg)
+        )
+        self._connection.execute(query, params) 
 
     def _serialize_car_request(self, msg):
-        pass
+        query = """
+        INSERT INTO car_request(hash, timestamp, mission_path_velocity_request, vcu_status, data)
+        VALUES (?, ?, ?, ?, ?);
+        """
+        params = (
+            msg.meta.hash,
+            utils.rosTimestampToMillis(msg.header.stamp),
+            msg.consumed_messages[1],
+            msg.consumed_messages[0],
+            serialize_message(msg)
+        )
+        self._connection.execute(query, params)
 
     def _serialize_path_planning_path_velocity_request(self, msg):
-        pass
+        query = """
+        INSERT INTO path_planning_path_velocity_request(hash, timestamp, perception_cones, data)
+        VALUES(?, ?, ?, ?);
+        """
+        print(msg)
+        params = (
+            msg.meta.hash,
+            utils.rosTimestampToMillis(msg.header.stamp),
+            msg.meta.consumed_messages[0],
+            serialize_message(msg)
+        )
+        self._connection.execute(query, params)
 
     def _serialize_mission_path_velocity_request(self, msg):
-        pass
+        query = """
+        INSERT INTO mission_path_velocity_request(hash, timestamp, path_planning_path_velocity_request, data)
+        VALUES(?, ?, ?, ?);
+        """
+        params = (
+            msg.meta.hash,
+            utils.rosTimestampToMillis(msg.header.stamp),
+            msg.consumed_messages[0],
+            serialize_message(msg)
+        )
+        self._connection.execute(query, params)
 
     def _serialize_perception_cones(self, msg):
         self._serialize_basic_message(msg, "perception_cones", msg.meta.hash)
@@ -96,7 +175,6 @@ class SQLiteSerializer:
                   utils.rosTimestampToMillis(msg.header.stamp),
                   serialize_message(msg))
         self._connection.execute(query, params)
-        self._connection.commit()
 
     def _serialize_ground_truth_cones(self, msg):
        self._serialize_basic_message(msg, "ground_truth_cones", utils.getMessageHash(msg)) 
