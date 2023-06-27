@@ -6,13 +6,14 @@ from rclpy.logging import get_logger
 import sim_data_collection.utils as utils
 
 class SQLiteSerializer:
-    def __init__(self):
+    def __init__(self, verbose=False):
         self._open = False
+        self._verbose = verbose
         self._logger = get_logger("SQLliteSerializer")
 
     def open(self, path):
         assert self._open == False
-        self._connection = db.connect(path, isolation_level=None)
+        self._connection = db.connect(path)
         self._open = True
 
     def close(self):
@@ -85,6 +86,7 @@ class SQLiteSerializer:
             timestamp INT NOT NULL,
             vcu_status VARCHAR(32),
             car_request VARCHAR(32),
+            data BLOB,
             FOREIGN KEY(car_request) REFERENCES car_request(hash),
             FOREIGN KEY(vcu_status) REFERENCES vcu_status(hash)
         );
@@ -107,7 +109,8 @@ class SQLiteSerializer:
         try:
             serialization_fns[id](msg)
         except db.IntegrityError as e:
-            self._logger.error(f"Attempt to add a duplicate message. Exception: {str(e)}")
+            if self._verbose == True:
+                self._logger.error(f"Attempt to add a duplicate message. Exception: {str(e)}")
 
     def _serialize_drive_request(self, msg):
         query = """
@@ -187,23 +190,40 @@ class SQLiteSerializer:
     def drop_unmet_dependencies(self):
         assert self._open == True
         queries = (
+            (
+            "path_planning_path_velocity_request",
             """
             DELETE FROM path_planning_path_velocity_request
             WHERE perception_cones NOT IN (SELECT hash FROM perception_cones);
-            """,
+            """
+            ),
+            (
+            "mission_path_velocity_request",
             """
             DELETE FROM mission_path_velocity_request
             WHERE path_planning_path_velocity_request NOT IN (SELECT hash FROM path_planning_path_velocity_request);
-            """,
+            """
+            ),
+            (
+            "car_request",
             """
             DELETE FROM car_request
             WHERE mission_path_velocity_request NOT IN (SELECT hash FROM mission_path_velocity_request);
-            """,
+            """
+            ),
+            (
+            "drive_request",
             """
             DELETE FROM drive_request
             WHERE car_request NOT IN (SELECT hash FROM car_request)
             OR
             vcu_status NOT IN (SELECT hash from vcu_status);
-            """,
+            """
+            ),
         )
-        for sql in queries: self._connection.execute(sql)
+        for (id,sql) in queries:
+            c = self._connection.cursor()
+            c.execute(sql)
+            dropped = c.rowcount
+            if dropped > 0 or True: self._logger.warn(f"Dropped {dropped} of '{id}'")
+            self._connection.commit()
