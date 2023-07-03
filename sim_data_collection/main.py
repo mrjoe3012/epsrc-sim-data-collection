@@ -18,10 +18,10 @@ def main():
         serializer.create_new_database()
         node.register_callback("all", serializer.serialize_message)
         while not node.has_stopped(): rclpy.spin_once(node)
-        rclpy.shutdown()
     finally:
         serializer.drop_unmet_dependencies()
         serializer.close()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
