@@ -1,6 +1,7 @@
 from rclpy.node import Node as RosNode
 import ugrdv_msgs.msg as ugrdv_msgs
 import eufs_msgs.msg as eufs_msgs
+import std_srvs.srv as std_srvs
 from rclpy.qos import QoSProfile
 
 class LiveDataCollector(RosNode):
@@ -11,6 +12,8 @@ class LiveDataCollector(RosNode):
         self._init_message_info()
         self._init_params()
         self._init_subscriptions()
+        self._init_services()
+        self._has_stopped = False
 
     def _init_qos(self):
         self._qos_profile = 1#QoSProfile()
@@ -61,9 +64,26 @@ class LiveDataCollector(RosNode):
                 self._qos_profile
             )
 
+    def _init_services(self):
+        self._stop_collection_srv = self.create_service(
+            std_srvs.Trigger,
+            "/sim_data_collection/stop_collection",
+            self._stop_collection_srv_handler
+        )
+
     def _fire_callbacks(self, id, msg):
         assert id in self._messages
         for fn in self._messages[id]["callbacks"]: fn(id, msg)
+
+    def _stop_collection_srv_handler(self, request, response):
+        if self._has_stopped == True:
+            response.success = False
+            response.message = "Data collection has already been stopped."
+        else:
+            self._has_stopped = True
+            response.success = True
+        self.get_logger().info(f"Received request to stop collection. Success={response.success}")
+        return response
 
     def register_callback(self, id, fn):
         assert id in self._messages or id == "all"
@@ -75,3 +95,6 @@ class LiveDataCollector(RosNode):
 
     def get_params(self):
         return self._param_names_and_values
+
+    def has_stopped(self):
+        return self._has_stopped

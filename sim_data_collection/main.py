@@ -17,7 +17,7 @@ def main():
         serializer.open(db_path)
         serializer.create_new_database()
         node.register_callback("all", serializer.serialize_message)
-        rclpy.spin(node)
+        while not node.has_stopped(): rclpy.spin_once(node)
         rclpy.shutdown()
     finally:
         serializer.drop_unmet_dependencies()
