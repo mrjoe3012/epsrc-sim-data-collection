@@ -7,11 +7,21 @@ import sim_data_collection.utils as utils
 
 class SQLiteSerializer:
     def __init__(self, verbose=False):
+        """
+        Responsible for serializing messages into a sqlite3 database.
+        
+        :param verbose: Whether or not to log extra information.
+        """
         self._open = False
         self._verbose = verbose
         self._logger = get_logger("SQLliteSerializer")
 
     def open(self, path):
+        """
+        Attempt to open an sqlite3 database.
+        
+        :param path: The path to an sqlite3 database.
+        """
         assert self._open == False
         if self._verbose == True:
             self._logger.info(f"Attempting to open database '{path}'")
@@ -19,14 +29,23 @@ class SQLiteSerializer:
         self._open = True
 
     def close(self):
+        """
+        Close any open sqlite3 database.
+        """
         assert self._open == True
         self._connection.commit()
         self._connection.close()
         self._open = False
 
     def create_new_database(self):
+        """
+        Initialise new database tables after having opened an sqlite3
+        database. This only works if the database which has been opened
+        hasn't already got these tables initialised.
+        """
         assert self._open == True
         cursor = self._connection.cursor()
+        # hardcoded schema, a bit grim
         queries = ("""
         CREATE TABLE vcu_status(
             hash VARCHAR(32) PRIMARY KEY,
@@ -97,6 +116,12 @@ class SQLiteSerializer:
         for sql in queries: cursor.execute(sql)
 
     def serialize_message(self, id, msg):
+        """
+        Take a message described by a string key and serialize
+        it into the database.
+        
+        :param id: The string key describing the database. Coupled with live_data_collector
+        """
         serialization_fns = {
             "drive_request" : self._serialize_drive_request,
             "car_request" : self._serialize_car_request,
@@ -171,6 +196,13 @@ class SQLiteSerializer:
         self._serialize_basic_message(msg, "perception_cones", msg.meta.hash)
 
     def _serialize_basic_message(self, msg, table_name, hash):
+        """
+        Utility function for serializing a message with no dependencies.
+        
+        :param msg: The ROS 2 message object.
+        :param table_name: The table to serialize to.
+        :param hash: The message's hash code.
+        """
         query = f"""
         INSERT INTO {table_name} (hash, timestamp, data)
         VALUES (?, ?, ?);
@@ -190,6 +222,10 @@ class SQLiteSerializer:
         self._serialize_basic_message(msg, "vcu_status", msg.meta.hash)
 
     def drop_unmet_dependencies(self):
+        """
+        Prune database entries by deleting messages whose
+        dependencies aren't present in the database.
+        """
         assert self._open == True
         queries = (
             (
@@ -227,5 +263,5 @@ class SQLiteSerializer:
             c = self._connection.cursor()
             c.execute(sql)
             dropped = c.rowcount
-            if dropped > 0 or True: self._logger.warn(f"Dropped {dropped} of '{id}'")
+            self._logger.warn(f"Dropped {dropped} of '{id}'")
             self._connection.commit()

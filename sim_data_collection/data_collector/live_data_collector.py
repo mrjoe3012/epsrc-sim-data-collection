@@ -6,6 +6,10 @@ from rclpy.qos import QoSProfile
 
 class LiveDataCollector(RosNode):
     def __init__(self):
+        """
+        A ROS2 node which receives data live from the ROS 2 network
+        and exposes it to consumers via callbacks.
+        """
         super().__init__("data_collector")
         self.get_logger().info("data_collector starting...") 
         self._init_qos()
@@ -16,9 +20,20 @@ class LiveDataCollector(RosNode):
         self._has_stopped = False
 
     def _init_qos(self):
-        self._qos_profile = 1#QoSProfile()
+        """
+        Sets up the qos profile which will be used for all
+        subscriptions and publishers. This should be tuned
+        to miss as few messages as possible.
+        """
+        self._qos_profile = 1
 
     def _init_message_info(self):
+        """
+        This initialises all of the topics and message
+        types that will be subscribed to by this node.
+        These entries correspond directly to the parameters
+        that are read by this node.
+        """
         def _message_description(topic, type):
             d = {
                 "topic" : topic,
@@ -39,6 +54,10 @@ class LiveDataCollector(RosNode):
         }
 
     def _init_params(self):
+        """
+        Use the entries initialized by _init_message_info to set up
+        the ROS 2 parameters to be declared and read by this node.
+        """
         # use the topic names in self._messages as a default
         self._param_names_and_values = {
             f"{id}_topic" : data["topic"] for (id,data) in self._messages.items()
@@ -54,6 +73,12 @@ class LiveDataCollector(RosNode):
             self._param_names_and_values[name] = self.get_parameter(name).value 
 
     def _init_subscriptions(self):
+        """
+        Use the entries initialized by _init_message_info to
+        create the ROS 2 subscriptions and their callback hooks.
+        """
+
+        # this callback simply redirects to user-defined callbacks
         def _make_callback(id):
             return lambda msg : self._fire_callbacks(id, msg)
         for (id, data) in self._messages.items():
@@ -65,6 +90,11 @@ class LiveDataCollector(RosNode):
             )
 
     def _init_services(self):
+        """
+        Sets up this node's ROS 2 services.
+
+        _stop_collection_srv: Used to stop the data collection cleanly.
+        """
         self._stop_collection_srv = self.create_service(
             std_srvs.Trigger,
             "/sim_data_collection/stop_collection",
@@ -72,10 +102,21 @@ class LiveDataCollector(RosNode):
         )
 
     def _fire_callbacks(self, id, msg):
+        """
+        Fire user-defined callbacks for a given message id.
+        
+        :param id: The string key for the specific message.
+        :param msg: The ROS 2 message object which was received.
+        """
         assert id in self._messages
         for fn in self._messages[id]["callbacks"]: fn(id, msg)
 
     def _stop_collection_srv_handler(self, request, response):
+        """
+        Callback method for the _stop_collection_srv service. Simply
+        signals to the driver logic that data collection / ROS loop should
+        cease.
+        """
         if self._has_stopped == True:
             response.success = False
             response.message = "Data collection has already been stopped."
@@ -86,6 +127,12 @@ class LiveDataCollector(RosNode):
         return response
 
     def register_callback(self, id, fn):
+        """
+        Register a callback for a specific message.
+        
+        :param id: The message id to trigger the callback.
+        :param fn: The callback callable.
+        """
         assert id in self._messages or id == "all"
         if id == "all":
             for id, data in self._messages.items():
@@ -94,7 +141,18 @@ class LiveDataCollector(RosNode):
             self._messages[id]["callbacks"].append(fn)
 
     def get_params(self):
+        """
+        Returns the ROS 2 parameters read in by the node.
+        
+        :returns: Dictionary of parameters and their applied values.
+        """
         return self._param_names_and_values
 
     def has_stopped(self):
+        """
+        Returns true if something has told the data collection tool to stop
+        running.
+        
+        :returns: Whether or not to stop collecting data.
+        """
         return self._has_stopped
