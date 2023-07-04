@@ -1,6 +1,6 @@
 import rclpy, os
-from sim_data_collection.live_data_collector import LiveDataCollector as Node
-from sim_data_collection.sqlite_serializer import SQLiteSerializer as Serializer
+from sim_data_collection.data_collector.live_data_collector import LiveDataCollector as Node
+from sim_data_collection.data_collector.sqlite_serializer import SQLiteSerializer as Serializer
 from ament_index_python import get_package_share_directory
 
 package_name = "sim_data_collection"
