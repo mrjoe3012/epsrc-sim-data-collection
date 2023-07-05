@@ -56,7 +56,7 @@ def main():
             new_progress = 100.0 * ((i+1) / len(db_paths))
             if new_progress - progress >= 1.0:
                 logger.info(f"PROGRESS: {new_progress}%")
-            progress = new_progress
+                progress = new_progress
             dataset.open(db_path)
             for msg_id in analysis.msg_ids:
                 msgs = dataset.get_msgs(msg_id).fetchall()
