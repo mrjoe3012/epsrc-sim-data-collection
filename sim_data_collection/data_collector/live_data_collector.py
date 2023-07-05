@@ -18,6 +18,7 @@ class LiveDataCollector(RosNode):
         self._init_subscriptions()
         self._init_services()
         self._has_stopped = False
+        self._debug = {}
 
     def _init_qos(self):
         """
@@ -79,8 +80,13 @@ class LiveDataCollector(RosNode):
         """
 
         # this callback simply redirects to user-defined callbacks
+        # def _make_callback(id):
+        #     return lambda msg : self._fire_callbacks(id, msg)
         def _make_callback(id):
-            return lambda msg : self._fire_callbacks(id, msg)
+            def cb(msg):
+                self._debug[id] = self._debug.get(id, 0) + 1
+                self._fire_callbacks(id, msg)
+            return cb
         for (id, data) in self._messages.items():
             data["subscription"] = self.create_subscription(
                 data["type"],
