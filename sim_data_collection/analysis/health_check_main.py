@@ -49,8 +49,14 @@ def main():
 
         # calculate mean durations and counts for each message
 
+        progress = 0.0
+
         # look for outliers
-        for db_path in db_paths:
+        for i,db_path in enumerate(db_paths):
+            new_progress = 100.0 * ((i+1) / len(db_paths))
+            if new_progress - progress >= 1.0:
+                logger.info(f"PROGRESS: {new_progress}%")
+            progress = new_progress
             dataset.open(db_path)
             for msg_id in analysis.msg_ids:
                 msgs = dataset.get_msgs(msg_id).fetchall()
