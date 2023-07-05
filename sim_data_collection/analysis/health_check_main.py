@@ -31,6 +31,9 @@ def main():
             for msg_id in analysis.msg_ids:
                 msgs = dataset.get_msgs(msg_id).fetchall()
                 msgs.sort(key=lambda x: x[1])
+                if len(msgs) == 0:
+                    logger.error(f"{db_path}:{msg_id} EMPTY TABLE!")
+                    continue
                 duration = utils.millisToSeconds(msgs[-1][1] - msgs[0][1])
                 count = len(msgs)
                 mean_durations[msg_id] += (duration - mean_durations[msg_id]) / n
