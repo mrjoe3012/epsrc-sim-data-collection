@@ -24,7 +24,7 @@ def main():
     finally:
         # trim the database down by deleting messages whose dependencies
         # aren't present
-        node.get_logger.info(f"debug: {node._debug}")
+        node.get_logger().info(f"debug: {node._debug}")
         serializer.drop_unmet_dependencies()
         serializer.close()
         rclpy.shutdown()
