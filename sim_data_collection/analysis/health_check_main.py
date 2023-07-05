@@ -25,9 +25,15 @@ def main():
         }
         n = 0
 
+        progress = 0.0
+
         for db_path in db_paths:
-            dataset.open(db_path)
             n += 1
+            new_progress = 100.0 * (n / len(db_paths))
+            if new_progress - progress >= 1:
+                logger.info(f"PROGRESS: {new_progress}%") 
+                progress = new_progress
+            dataset.open(db_path)
             for msg_id in analysis.msg_ids:
                 msgs = dataset.get_msgs(msg_id).fetchall()
                 msgs.sort(key=lambda x: x[1])
