@@ -26,3 +26,5 @@ def getMessageHashMeta(msg):
 
 def rosTimestampToMillis(stamp):
     return int(stamp.sec * 1e3 + stamp.nanosec * 1e-6)
+
+def millisToSeconds(ms): return ms / 1000.0
