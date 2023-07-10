@@ -6,13 +6,10 @@ import sim_data_collection.analysis.analysis as analysis
 import sim_data_collection.utils as utils
 from sim_data_collection.analysis.dataset import Dataset
 
-def has_empty_table(): pass
-
 def main():
     assert len(sys.argv) > 1, "Please provide a database path."
     rclpy.init()
     db_paths = sys.argv[1:]
-    dataset = Dataset()
     success = True
     try:
         logger = logging.get_logger("integrity_check")
@@ -24,15 +21,12 @@ def main():
             if new_progress - progress >= 1:
                 logger.info(f"PROGRESS: {new_progress}%")
                 progress = new_progress
-            dataset.open(db_path)
-            for msg_id in analysis.msg_ids:
-                msgs = dataset.get_msgs(msg_id).fetchall()
-                msgs.sort(key=lambda x: x[1])
-                if len(msgs) == 0:
-                    logger.error(f"{db_path}:{msg_id} EMPTY TABLE!")
-                    success = False
-                    continue
-            dataset.close()
+            analysis.integrity_check_db(
+                db_path
+            ) 
+    except analysis.DatabaseIntegrityError as e:
+        logger.error(str(e))
+        success = False
     except Exception as e:
         logger.error(f"An error has occured: {e}")
         success = False
@@ -42,7 +36,7 @@ def main():
             rclpy.shutdown()
             sys.exit(0)
         else:
-            logger.info("Integrity check failed. Reason: empty tables")
+            logger.info("Integrity check failed. Reason: empty tables.")
             rclpy.shutdown()
             sys.exit(1)
 
