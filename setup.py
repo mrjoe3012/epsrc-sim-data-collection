@@ -22,7 +22,7 @@ setup(
     entry_points={
         'console_scripts': [
             'data_collector = sim_data_collection.data_collector.main:main',
-            'health_check = sim_data_collection.analysis.health_check_main:main',
+            'integrity_check = sim_data_collection.analysis.integrity_check:main',
         ],
     },
 )
