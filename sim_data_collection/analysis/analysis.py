@@ -319,3 +319,14 @@ def intersection_check(dataset: Dataset, track: Track, visualize = False):
         plt.show()
 
     return intersection, intersection_time
+
+def get_lap_times(dataset: Dataset, track: Track):
+    """
+    Finds intersections with starting cones to
+    determine lap times.
+    
+    :param dataset: The dataset to use.
+    :param track: The track associated with the dataset.
+    :returns: A list of lap times.
+    """
+    pass  # TODO
