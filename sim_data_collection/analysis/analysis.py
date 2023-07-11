@@ -184,6 +184,32 @@ class Line:
         self.sy = sy
         self.ex = ex
         self.ey = ey
+        self.m, self.c = self._get_line_eqn()
+
+    def _get_line_eqn(self):
+        """
+        Calculates the gradient and y-axis intercept
+        of the line.
+        
+        :returns: m, c
+        """
+        m = (self.ey - self.sy) / (self.ex - self.sx)
+        c = self.sy - m * self.sx
+        return m, c
+
+    def project(self, x):
+        """
+        Attempt to project a point onto the line segment.
+        
+        :param x: The x component of the point to project.
+        :returns: Whether or not the intersection exists
+        and its position. Bool, int_x, int_y
+        """
+        can_project = x >= self.sx and x <= self.ex
+        y = None
+        if can_project == True: 
+            y = self.m * x + self.c
+        return can_project, x, y
 
     @staticmethod
     def make_line_from_cones(cone1, cone2):
