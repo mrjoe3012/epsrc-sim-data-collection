@@ -5,6 +5,10 @@ import math
 import numpy as np
 from pathlib import Path
 from ament_index_python import get_package_share_directory
+from eufs_msgs.msg import CarState
+from rclpy.serialization import deserialize_message
+from scipy.spatial.transform import Rotation
+import copy
 
 msg_ids = [
     "ground_truth_state",
@@ -53,13 +57,47 @@ def integrity_check_db(database_path: str):
         )
 
 class Track:
-    def __init__(self, blue, yellow):
+    def __init__(self, blue, yellow,
+                 car_start = None):
+        """
+        Represents a racetrack.
+        
+        :param blue: list of blue cone positions
+        :param yellow: list of yellow cone positions
+        :param car_start: Car starting pose (x, y, theta)
+        """
         self.blue_cones = blue
         self.yellow_cones = yellow
+        if car_start is None: car_start = (0.0, 0.0, 0.0)
+        self.car_start = car_start
+
+    @staticmethod
+    def track_from_db_path(db_path):
+        """
+        Loads a track with the same UUID as
+        that in the database path.
+        
+        :param db_path: Path to an sqlite3 database
+        with the .db3 extension.
+        :returns: The loaded track.
+        """
+        p = Path(db_path)
+        assert p.is_file()
+        filename = p.name
+        filename = filename.replace(".db3", ".csv")
+        eufs_tracks_share = get_package_share_directory(
+            "eufs_tracks"
+        )
+        track_path = Path(eufs_tracks_share) / "csv" / filename
+        return Track.read_csv(track_path)
 
     @staticmethod
     def read_csv(track_file: str):
+        """
+        Initialises a track from a csv file.
+        """
         blue, yellow = [], []
+        start_x, start_y, start_heading = 0.0, 0.0, 0.0
         with open(track_file, "r") as f:
             for line in f:
                 cols = line.strip().split(",")
@@ -69,60 +107,215 @@ class Track:
                     arr = blue
                 elif tag == "yellow":
                     arr = yellow
-                if arr:
+                elif tag == "car_start":
+                    start_x = float(cols[1])
+                    start_y = float(cols[2])
+                    start_heading = float(cols[3])
+                    print(start_x, start_y, start_heading)
+                if arr is not None:
                     cone = (
-                        float(tag[1]),
-                        float(tag[2])
+                        float(cols[1]),
+                        float(cols[2])
                     )
                     arr.append(cone)
-        return Track(blue, yellow)
+        return Track(
+            blue, yellow,
+            car_start = (start_x, start_y, start_heading)
+        )
 
-from matplotlib.pyplot import plt
+    def transform_car_pose(self, car_pose):
+        """
+        Takes a car pose message, relative to the
+        starting pose and transforms it into the global
+        frame.
+        
+        :param car_pose: The car pose to transform.
+        :returns: Car pose in global frame.
+        """
+        start_heading = self.car_start[2]
+        rotation_matrix = np.matrix([
+            [math.cos(-start_heading), math.sin(-start_heading)],
+            [-math.sin(-start_heading), math.cos(-start_heading)]
+        ])
+        pos = np.matrix([
+            [car_pose.pose.pose.position.x],
+            [car_pose.pose.pose.position.y]
+        ])
+        car_start = np.matrix([
+            [self.car_start[0]],
+            [self.car_start[1]]
+        ])
+        # rotate the position by start heading offset and
+        # add the start position offset
+        new_car_pos = rotation_matrix @ pos + car_start
+        # add the heading offset and reconstruct the orientation
+        # quaternion
+        car_heading = Rotation.from_quat([
+            car_pose.pose.pose.orientation.x,
+            car_pose.pose.pose.orientation.y,
+            car_pose.pose.pose.orientation.z,
+            car_pose.pose.pose.orientation.w,
+        ]).as_euler("XYZ")[2]
+        new_heading = car_heading + start_heading
+        new_orientation = Rotation.from_euler(
+            "XYZ",
+            [0.0, 0.0, new_heading]
+        ).as_quat()
+        new_car_pose = copy.deepcopy(car_pose) 
+        new_car_pose.pose.pose.position.x = new_car_pos[0,0]
+        new_car_pose.pose.pose.position.y = new_car_pos[1,0]
+        new_car_pose.pose.pose.orientation.x = new_orientation[0]
+        new_car_pose.pose.pose.orientation.y = new_orientation[1]
+        new_car_pose.pose.pose.orientation.z = new_orientation[2]
+        new_car_pose.pose.pose.orientation.w = new_orientation[3]
+        return new_car_pose
 
 class Line:
     def __init__(self, sx=0.0, sy=0.0, ex=0.0, ey=0.0):
+        """
+        Data structure to represent a line segment.
+        
+        :param sx: Starting point x.
+        :param sy: Starting point y.
+        :param ex: End point x.
+        :param ey: End point y.
+        """
         self.sx = sx
         self.sy = sy
         self.ex = ex
         self.ey = ey
 
-def make_line_from_cones(cone1, cone2):
-    return Line(
-        cone1[0], cone1[1],
-        cone2[0], cone2[1]
-    )
+    @staticmethod
+    def make_line_from_cones(cone1, cone2):
+        """
+        Initialises a line from a pair of cones.
+        
+        :param cone1: First cone.
+        :param cone2: Second cone.
+        :returns: The line between the cones.
+        """
+        return Line(
+            cone1[0], cone1[1],
+            cone2[0], cone2[1]
+        )
 
-def track_from_db_path(db_path):
+    @staticmethod
+    def make_line_from_car_state(car_state):
+        """
+        Initialises a line using a car's position
+        and rotation.
+        
+        :param car_state: The car's position and rotation.
+        :returns: The line representing the car.
+        """
+        length = 1.5 
+        rot = Rotation.from_quat([
+            car_state.pose.pose.orientation.x,
+            car_state.pose.pose.orientation.y,
+            car_state.pose.pose.orientation.z,
+            car_state.pose.pose.orientation.w,
+        ])
+        yaw = -rot.as_euler("XYZ")[-1]
+        rotmat = np.matrix([
+            [math.cos(yaw), math.sin(yaw)],
+            [-math.sin(yaw), math.cos(yaw)]
+        ])
+        pos = np.matrix([
+            [car_state.pose.pose.position.x],
+            [car_state.pose.pose.position.y]
+        ])
+        start = rotmat @ np.matrix([[length/2], [0.0]]) + pos
+        end = rotmat @ np.matrix([[-length/2], [0.0]]) + pos
+        return Line(start[0,0], start[1,0], end[0,0], end[1,0])
+
+    @staticmethod
+    def _ccw(
+        ax, ay, 
+        bx, by,
+        cx, cy):
+        """
+        Utility function used for intersection check.
+        """
+        return \
+            (cy - ay) * (bx - ax) > \
+            (by - ay) * (cx - ax)
+
+    @staticmethod
+    def intersection(l1, l2):
+        """
+        Returns true if two line segments intersect.
+        """
+        ax, ay = l1.sx, l1.sy
+        bx, by = l1.ex, l1.ey
+        cx, cy = l2.sx, l2.sy
+        dx, dy = l2.ex, l2.ey
+        return \
+            Line._ccw(ax, ay, cx, cy, dx, dy) \
+            != Line._ccw(bx, by, cx, cy, dx, dy) \
+            and Line._ccw(ax, ay, bx, by, cx, cy) \
+            != Line._ccw(ax, ay, bx, by, dx, dy)
+
+def intersection_check(dataset: Dataset, track: Track, visualize = False):
     """
-    Loads a track with the same UUID as
-    that in the database path.
+    Check a database for any track intersections.
     
-    :param db_path: Path to an sqlite3 database
-    with the .db3 extension.
-    :returns: The loaded track.
+    :param dataset: The dataset to check.
+    :param track: The track which the dataset was created from.
+    :param visualize: Plot the results.
+    :returns: Whether or not there exists an intersection and the time at which it occurs.
     """
-    p = Path(db_path)
-    assert p.is_file()
-    filename = p.name
-    filename.replace(".db3", ".csv")
-    eufs_tracks_share = get_package_share_directory(
-        "eufs_tracks"
-    )
-    track_path = Path(eufs_tracks_share) / "csv" / filename
-    return Track.read_csv(track_path)
-
-def intersection_check(dataset: Dataset, track: Track):
-    cones = track.blue_cones + track.yellow_cones
-    # calculate lines using each pair of consecutive cones
-    cone_lines = [
-        make_line_from_cones(cones[i - 1], cones[i]) \
-        for i in range(1, len(cones))
-    ] 
-    # now for each car pose, check if it intersects with any of
-    # these lines
-    car_poses = [
-        dataset.get_msgs("ground_truth_state").fetchall()
+    # construct lines from track cones
+    blue_cone_lines = [
+        Line.make_line_from_cones(track.blue_cones[i], track.blue_cones[i + 1]) \
+        for i in range(-1, len(track.blue_cones) - 1)
     ]
-    print(car_poses)
-    
+    yellow_cone_lines = [
+        Line.make_line_from_cones(track.yellow_cones[i - 1], track.yellow_cones[i]) \
+        for i in range(-1, len(track.yellow_cones) - 1)
+    ]
+    cone_lines = blue_cone_lines + yellow_cone_lines
 
+    # deserialize all car poses in the database and sort them by ascending
+    # timestamp
+    car_poses = sorted([
+        (x[1], track.transform_car_pose(deserialize_message(x[2], CarState))) \
+        for x in dataset.get_msgs("ground_truth_state").fetchall()
+    ],
+    key = lambda data: data[0]
+    )
+
+    # draw track and starting point
+    if visualize:
+        for line in blue_cone_lines:
+            plt.plot([line.sx, line.ex], [line.sy, line.ey], "-", color="blue")
+        for line in yellow_cone_lines:
+            plt.plot([line.sx, line.ex], [line.sy, line.ey], "-", color="yellow")
+        plt.plot([track.car_start[0]], [track.car_start[1]], "o", color="red", markersize=15)
+
+
+    # iterate through each car pose and check for intersection with
+    # all line segments.
+    intersection = False
+    intersection_idx = len(car_poses)
+    for car_pose_idx, (timestamp, car_pose) in enumerate(car_poses):
+        if intersection == True: break
+        car_pose_line = Line.make_line_from_car_state(car_pose)
+        for cone_line in cone_lines:
+            if Line.intersection(car_pose_line, cone_line):
+                intersection_time = (timestamp - car_poses[0][0]) / 1000 
+                print(f"INTERSECTION! {intersection_time} seconds.")
+                intersection = True
+                intersection_idx = car_pose_idx
+                break
+    
+    # plot the path up to first intersection,
+    # or the entire path if there was none
+    if visualize:
+        plt.plot(
+            [c.pose.pose.position.x for _,c in car_poses[:intersection_idx + 1]],
+            [c.pose.pose.position.y for _,c in car_poses[:intersection_idx + 1]],
+            "-", color="black")
+            
+        plt.show()
+
+    return intersection, intersection_time

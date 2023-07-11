@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'data_collector = sim_data_collection.data_collector.main:main',
             'integrity_check = sim_data_collection.analysis.integrity_check:main',
+            "analysis = sim_data_collection.analysis.analysis_main:main"
         ],
     },
 )
