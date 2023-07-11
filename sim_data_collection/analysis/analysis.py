@@ -70,6 +70,17 @@ class Track:
         self.yellow_cones = yellow
         if car_start is None: car_start = (0.0, 0.0, 0.0)
         self.car_start = car_start
+        self.blue_cone_lines, self.yellow_cone_lines = self._get_cone_lines()
+        self.first_blue_line, _, _ = Line.project_to_nearest(
+            self.car_start[0], self.car_start[1],
+            self.blue_cone_lines
+        )
+        self.first_yellow_line, _, _ = Line.project_to_nearest(
+            self.car_start[0], self.car_start[1],
+            self.yellow_cone_lines
+        )
+        assert self.first_blue_line is not None
+        assert self.first_yellow_line is not None
 
     @staticmethod
     def track_from_db_path(db_path):
@@ -170,6 +181,33 @@ class Track:
         new_car_pose.pose.pose.orientation.w = new_orientation[3]
         return new_car_pose
 
+    def _get_cone_lines(self):
+        """
+        Calculate all lines between consecutive cones.
+        
+        :returns: Arrays of cone lines for each cone colour.
+        """
+        blue_cone_lines = [
+            Line.make_line_from_cones(self.blue_cones[i], self.blue_cones[i + 1]) \
+            for i in range(-1, len(self.blue_cones) - 1)
+        ]
+        yellow_cone_lines = [
+            Line.make_line_from_cones(self.yellow_cones[i - 1], self.yellow_cones[i]) \
+            for i in range(-1, len(self.yellow_cones) - 1)
+        ]
+        return blue_cone_lines, yellow_cone_lines
+
+    def get_completion(self, car_pose):
+       """
+       Get the completion percentage represented by
+       car_pose.
+       
+       :param car_pose: The pose to calculate the
+       completion percentage from.
+       :returns: float [0-1]
+       """ 
+       pass
+
 class Line:
     def __init__(self, sx=0.0, sy=0.0, ex=0.0, ey=0.0):
         """
@@ -210,6 +248,21 @@ class Line:
         if can_project == True: 
             y = self.m * x + self.c
         return can_project, x, y
+
+    @staticmethod
+    def project_to_nearest(x, y, lines):
+        nearest_successful_projection = None
+        nearest_successful_projection_distance = math.inf
+        for line in lines:
+            proj, int_x, int_y = line.project(x)
+            if proj == False: break
+            dist = math.sqrt(
+                (int_y - y)**2 + (int_x - x)**2
+            )
+            if dist < nearest_successful_projection_distance:
+                nearest_successful_projection_distance = dist
+                nearest_successful_projection = (line, int_x, int_y)
+        return nearest_successful_projection, nearest_successful_projection_distance
 
     @staticmethod
     def make_line_from_cones(cone1, cone2):
@@ -291,14 +344,7 @@ def intersection_check(dataset: Dataset, track: Track, visualize = False):
     :returns: Whether or not there exists an intersection and the time at which it occurs.
     """
     # construct lines from track cones
-    blue_cone_lines = [
-        Line.make_line_from_cones(track.blue_cones[i], track.blue_cones[i + 1]) \
-        for i in range(-1, len(track.blue_cones) - 1)
-    ]
-    yellow_cone_lines = [
-        Line.make_line_from_cones(track.yellow_cones[i - 1], track.yellow_cones[i]) \
-        for i in range(-1, len(track.yellow_cones) - 1)
-    ]
+    blue_cone_lines, yellow_cone_lines = track.blue_cone_lines, track.yellow_cone_lines
     cone_lines = blue_cone_lines + yellow_cone_lines
 
     # deserialize all car poses in the database and sort them by ascending
