@@ -9,6 +9,7 @@ from eufs_msgs.msg import CarState
 from rclpy.serialization import deserialize_message
 from scipy.spatial.transform import Rotation
 import copy
+from typing import List, Dict, Optional, Tuple
 
 msg_ids = [
     "ground_truth_state",
@@ -57,7 +58,7 @@ def integrity_check_db(database_path: str):
         )
 
 class Track:
-    def __init__(self, blue, yellow,
+    def __init__(self, blue, yellow, centreline, centreline_lines,
                  car_start = None, direction = 1):
         """
         Represents a racetrack.
@@ -66,26 +67,48 @@ class Track:
         :param yellow: list of yellow cone positions
         :param car_start: Car starting pose (x, y, theta)
         """
-        self.nyellow, self.nblue = Line(), Line()
+        self.ncent = Line()
         self.blue_cones = blue
+        self.centreline = centreline
+        self.centreline_lines = centreline_lines
         self.yellow_cones = yellow
         if car_start is None: car_start = (0.0, 0.0, 0.0)
         self.car_start = car_start
         self.direction = direction
         self.blue_cone_lines, self.yellow_cone_lines = self._get_cone_lines()
-        (self.first_blue_line, _, _), _ = Line.project_to_nearest(
+        (self.first_centreline, _, _), _ = Line.project_to_nearest(
             self.car_start[0], self.car_start[1],
-            self.blue_cone_lines
+            self.centreline_lines
         )
-        (self.first_yellow_line, _, _), _ = Line.project_to_nearest(
-            self.car_start[0], self.car_start[1],
-            self.yellow_cone_lines
-        )
-        assert self.first_blue_line is not None
-        assert self.first_yellow_line is not None
+        assert self.first_centreline is not None
         self.path_direction = self._get_path_direction()
         print(f"Track is {'clockwise' if self.direction == 1 else 'anticlockwise'}")
         print(f"Path is {'clockwise' if self.path_direction == 1 else 'anticlockwise'}")
+
+    @staticmethod
+    def extract_centreline(all_cones: List[Tuple[float, float, str]]) -> List[Tuple[float, float]]:
+        centreline = []
+        lines = []
+        for i in range(len(all_cones)):
+            j = (i - 1) % len(all_cones)
+            prev_x, prev_y, prev_col = all_cones[j]
+            cur_x, cur_y, cur_col = all_cones[i]
+            if cur_col == prev_col: continue 
+            cen_x = (cur_x + prev_x) / 2
+            cen_y = (cur_y + prev_y) / 2
+            centreline.append((
+                cen_x, cen_y
+            ))
+        for i in range(len(centreline)):
+            j = (i - 1) % len(centreline)
+            prev_x, prev_y = centreline[j]
+            cur_x, cur_y = centreline[i]
+            lines.append(Line(
+                prev_x, prev_y,
+                cur_x, cur_y
+            ))
+        print(len(centreline), len(lines))
+        return centreline, lines
 
     @staticmethod
     def track_from_db_path(db_path):
@@ -113,6 +136,7 @@ class Track:
         Initialises a track from a csv file.
         """
         blue, yellow = [], []
+        all = []
         start_x, start_y, start_heading = 0.0, 0.0, 0.0
         with open(track_file, "r") as f:
             for line in f:
@@ -133,8 +157,12 @@ class Track:
                         float(cols[2])
                     )
                     arr.append(cone)
+                    all.append(
+                        (cone[0], cone[1], tag)
+                    )
+        centreline, centreline_lines = Track.extract_centreline(all)
         return Track(
-            blue, yellow,
+            blue, yellow, centreline, centreline_lines,
             car_start = (start_x, start_y, start_heading),
             direction = 1 if str.replace(Path(track_file).name, ".csv", "")[-1] == "r" else -1
         )
@@ -210,15 +238,16 @@ class Track:
 
     def _get_completion(self, x: float, y: float,
                         lines: list, first_line):
-        MAX_DIST = 10.0
+        MAX_DIST = 15.0
         nearest_proj, dist = Line.project_to_nearest(
             x, y,
             lines
         )
         if not nearest_proj or dist > MAX_DIST: return math.nan, Line()
-        (nearest, _, _) = nearest_proj
+        (nearest, int_x, int_y) = nearest_proj
+        remainder = np.sqrt((int_x - nearest.sx)**2 + (int_y - nearest.sy)**2)
         first_idx = lines.index(first_line)
-        distance = 0.0
+        distance = remainder
         total_distance = 0.0
         reached_car = False
         for i in range(len(lines)):
@@ -230,7 +259,7 @@ class Track:
             if reached_car == False:
                 distance += l
             total_distance += l
-        completion = distance / total_distance    
+        completion = distance / total_distance 
         # if self.path_direction == self.direction: completion = 1 - completion
         return completion, nearest
 
@@ -245,19 +274,11 @@ class Track:
        """ 
        x = car_pose.pose.pose.position.x
        y = car_pose.pose.pose.position.y
-       blue_completion, n = self._get_completion(
-           x, y,
-           self.blue_cone_lines,
-           self.first_blue_line
+       completion, n = self._get_completion(
+           x, y, self.centreline_lines, self.first_centreline
        )
-       self.nblue = n
-       yellow_completion, n = self._get_completion(
-           x, y,
-           self.yellow_cone_lines,
-           self.first_yellow_line
-       )
-       self.nyellow = n
-       return 0.5 * blue_completion + 0.5 * yellow_completion
+       self.ncent = n
+       return completion
 
 class Line:
     def __init__(self, sx=0.0, sy=0.0, ex=0.0, ey=0.0):
@@ -314,7 +335,7 @@ class Line:
         xproj = line_vec[0,0]*point_vec[0,0] + line_vec[1,0]*point_vec[1,0]
         intersect = xproj * line_vec + start_pt
         int_x, int_y = intersect[0,0], intersect[1,0]
-        can_project = 0 <= xproj <= self.get_length()
+        can_project = -0.5 * self.get_length() <= xproj <= self.get_length() * 1.5
         return (can_project, int_x, int_y)
 
     def get_length(self):

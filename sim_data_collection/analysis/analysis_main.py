@@ -31,8 +31,9 @@ def main():
             start_time = dataset._connection.execute(
                 "SELECT timestamp, data FROM ground_truth_state ORDER BY timestamp ASC"
             ).fetchone()[0] / 1e3
+            completions = []
             def cb(i):
-                nonlocal t
+                nonlocal t, completions
                 ax1.cla()
                 # ax1.set_xlim((-150, 150))
                 # ax1.set_ylim((-150, 150))
@@ -40,7 +41,11 @@ def main():
                 ax2.set_ylim((0.0, 2.0))
                 dt = time.time() - t
                 sim_time = (start_time + factor*dt) * 1e3
-
+                ax1.plot(
+                    [c[0] for c in track.centreline],
+                    [c[1] for c in track.centreline],
+                    "-", color="black", markersize=3
+                )
                 ax1.plot(
                     track.car_start[0], track.car_start[1],
                     "o", color="green"
@@ -49,16 +54,6 @@ def main():
                     [x[0] for x in track.blue_cones],
                     [x[1] for x in track.blue_cones],
                     "o", color="blue", markersize=2
-                )
-                ax1.plot(
-                    # [track.first_blue_line.sx, track.first_blue_line.ex], [track.first_blue_line.sy, track.first_blue_line.ey],
-                    [track.nblue.sx, track.nblue.ex], [track.nblue.sy, track.nblue.ey],
-                    "-", color="pink"
-                )
-                ax1.plot(
-                    # [track.first_yellow_line.sx, track.first_yellow_line.ex], [track.first_yellow_line.sy, track.first_yellow_line.ey],
-                    [track.nyellow.sx, track.nyellow.ex], [track.nyellow.sy, track.nyellow.ey],
-                    "-", color="purple"
                 )
                 ax1.plot(
                     [x[0] for x in track.yellow_cones],
@@ -75,11 +70,19 @@ def main():
                 else: latest_car_pose = deserialize_message(latest_car_pose[1], CarState)
                 latest_car_pose = track.transform_car_pose(latest_car_pose)
                 x, y = latest_car_pose.pose.pose.position.x, latest_car_pose.pose.pose.position.y
-                ax1.plot(x, y, "o", color="red")
+                ax1.plot(x, y, "o", color="black")
+                ax1.plot(
+                    [track.ncent.sx, track.ncent.ex], [track.ncent.sy, track.ncent.ey],
+                    "-", color="red"
+                )
                 completion = track.get_completion(
                     latest_car_pose
                 )
-                ax2.plot(sim_time / 1e3, completion, "o", color="black")
+                completions.append((sim_time / 1e3, completion))
+                ax2.plot(
+                    [c[0] for c in completions],
+                    [c[1] for c in completions],
+                    "-", color="black")
 
 
             anim = FuncAnimation(fig, cb, interval=100)
