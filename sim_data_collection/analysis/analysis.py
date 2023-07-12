@@ -58,7 +58,7 @@ def integrity_check_db(database_path: str):
 
 class Track:
     def __init__(self, blue, yellow,
-                 car_start = None):
+                 car_start = None, direction = 1):
         """
         Represents a racetrack.
         
@@ -66,21 +66,26 @@ class Track:
         :param yellow: list of yellow cone positions
         :param car_start: Car starting pose (x, y, theta)
         """
+        self.nyellow, self.nblue = Line(), Line()
         self.blue_cones = blue
         self.yellow_cones = yellow
         if car_start is None: car_start = (0.0, 0.0, 0.0)
         self.car_start = car_start
+        self.direction = direction
         self.blue_cone_lines, self.yellow_cone_lines = self._get_cone_lines()
-        self.first_blue_line, _, _ = Line.project_to_nearest(
+        (self.first_blue_line, _, _), _ = Line.project_to_nearest(
             self.car_start[0], self.car_start[1],
             self.blue_cone_lines
         )
-        self.first_yellow_line, _, _ = Line.project_to_nearest(
+        (self.first_yellow_line, _, _), _ = Line.project_to_nearest(
             self.car_start[0], self.car_start[1],
             self.yellow_cone_lines
         )
         assert self.first_blue_line is not None
         assert self.first_yellow_line is not None
+        self.path_direction = self._get_path_direction()
+        print(f"Track is {'clockwise' if self.direction == 1 else 'anticlockwise'}")
+        print(f"Path is {'clockwise' if self.path_direction == 1 else 'anticlockwise'}")
 
     @staticmethod
     def track_from_db_path(db_path):
@@ -122,7 +127,6 @@ class Track:
                     start_x = float(cols[1])
                     start_y = float(cols[2])
                     start_heading = float(cols[3])
-                    print(start_x, start_y, start_heading)
                 if arr is not None:
                     cone = (
                         float(cols[1]),
@@ -131,7 +135,8 @@ class Track:
                     arr.append(cone)
         return Track(
             blue, yellow,
-            car_start = (start_x, start_y, start_heading)
+            car_start = (start_x, start_y, start_heading),
+            direction = 1 if str.replace(Path(track_file).name, ".csv", "")[-1] == "r" else -1
         )
 
     def transform_car_pose(self, car_pose):
@@ -181,6 +186,12 @@ class Track:
         new_car_pose.pose.pose.orientation.w = new_orientation[3]
         return new_car_pose
 
+    def _get_path_direction(self):
+        return Line.get_direction(
+            self.blue_cone_lines[1],
+            self.blue_cone_lines[len(self.blue_cone_lines)//2]
+        )
+
     def _get_cone_lines(self):
         """
         Calculate all lines between consecutive cones.
@@ -197,6 +208,32 @@ class Track:
         ]
         return blue_cone_lines, yellow_cone_lines
 
+    def _get_completion(self, x: float, y: float,
+                        lines: list, first_line):
+        MAX_DIST = 10.0
+        nearest_proj, dist = Line.project_to_nearest(
+            x, y,
+            lines
+        )
+        if not nearest_proj or dist > MAX_DIST: return math.nan, Line()
+        (nearest, _, _) = nearest_proj
+        first_idx = lines.index(first_line)
+        distance = 0.0
+        total_distance = 0.0
+        reached_car = False
+        for i in range(len(lines)):
+            idx = (first_idx + i) % len(lines)
+            line = lines[idx]
+            l = line.get_length()
+            if line == nearest:
+                reached_car = True
+            if reached_car == False:
+                distance += l
+            total_distance += l
+        completion = distance / total_distance    
+        # if self.path_direction == self.direction: completion = 1 - completion
+        return completion, nearest
+
     def get_completion(self, car_pose):
        """
        Get the completion percentage represented by
@@ -206,7 +243,21 @@ class Track:
        completion percentage from.
        :returns: float [0-1]
        """ 
-       pass
+       x = car_pose.pose.pose.position.x
+       y = car_pose.pose.pose.position.y
+       blue_completion, n = self._get_completion(
+           x, y,
+           self.blue_cone_lines,
+           self.first_blue_line
+       )
+       self.nblue = n
+       yellow_completion, n = self._get_completion(
+           x, y,
+           self.yellow_cone_lines,
+           self.first_yellow_line
+       )
+       self.nyellow = n
+       return 0.5 * blue_completion + 0.5 * yellow_completion
 
 class Line:
     def __init__(self, sx=0.0, sy=0.0, ex=0.0, ey=0.0):
@@ -231,11 +282,14 @@ class Line:
         
         :returns: m, c
         """
-        m = (self.ey - self.sy) / (self.ex - self.sx)
+        try:
+            m = (self.ey - self.sy) / (self.ex - self.sx)
+        except:
+            m = 0.0
         c = self.sy - m * self.sx
         return m, c
 
-    def project(self, x):
+    def project(self, x, y):
         """
         Attempt to project a point onto the line segment.
         
@@ -243,19 +297,39 @@ class Line:
         :returns: Whether or not the intersection exists
         and its position. Bool, int_x, int_y
         """
-        can_project = x >= self.sx and x <= self.ex
-        y = None
-        if can_project == True: 
-            y = self.m * x + self.c
-        return can_project, x, y
+        line_vec = np.matrix([
+            [self.ex - self.sx],
+            [self.ey - self.sy]
+        ])
+        mag = np.sqrt(line_vec[0,0]**2 + line_vec[1,0]**2)
+        line_vec = (1/mag) * line_vec
+        start_pt = np.matrix([
+            [self.sx],
+            [self.sy]
+        ])
+        point_vec = np.matrix([
+            [x],
+            [y]
+        ]) - start_pt
+        xproj = line_vec[0,0]*point_vec[0,0] + line_vec[1,0]*point_vec[1,0]
+        intersect = xproj * line_vec + start_pt
+        int_x, int_y = intersect[0,0], intersect[1,0]
+        can_project = 0 <= xproj <= self.get_length()
+        return (can_project, int_x, int_y)
+
+    def get_length(self):
+        return math.sqrt(
+            (self.ex - self.sx) ** 2 + \
+            (self.ey - self.sy) ** 2
+        )
 
     @staticmethod
     def project_to_nearest(x, y, lines):
         nearest_successful_projection = None
         nearest_successful_projection_distance = math.inf
         for line in lines:
-            proj, int_x, int_y = line.project(x)
-            if proj == False: break
+            proj, int_x, int_y = line.project(x, y)
+            if proj == False: continue
             dist = math.sqrt(
                 (int_y - y)**2 + (int_x - x)**2
             )
@@ -306,6 +380,15 @@ class Line:
         start = rotmat @ np.matrix([[length/2], [0.0]]) + pos
         end = rotmat @ np.matrix([[-length/2], [0.0]]) + pos
         return Line(start[0,0], start[1,0], end[0,0], end[1,0])
+
+    @staticmethod
+    def get_direction(line1, line2):
+        mat = np.matrix([
+            [1.0, line1.sx, line1.sy],
+            [1.0, line1.ex, line1.ey],
+            [1.0, line2.sx, line2.sy]
+        ])
+        return 1 if np.linalg.det(mat) > 0 else -1
 
     @staticmethod
     def _ccw(
