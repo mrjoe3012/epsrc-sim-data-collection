@@ -58,7 +58,7 @@ def integrity_check_db(database_path: str):
         )
 
 class Track:
-    def __init__(self, blue, yellow, centreline, centreline_lines,
+    def __init__(self, blue, yellow, large_orange, centreline, centreline_lines,
                  car_start = None, direction = 1):
         """
         Represents a racetrack.
@@ -72,10 +72,12 @@ class Track:
         self.centreline = centreline
         self.centreline_lines = centreline_lines
         self.yellow_cones = yellow
+        self.large_orange_cones = large_orange
         if car_start is None: car_start = (0.0, 0.0, 0.0)
         self.car_start = car_start
         self.direction = direction
         self.blue_cone_lines, self.yellow_cone_lines = self._get_cone_lines()
+        self.finish_line =  self._get_finish_line()
         (self.first_centreline, _, _), _ = Line.project_to_nearest(
             self.car_start[0], self.car_start[1],
             self.centreline_lines
@@ -135,7 +137,7 @@ class Track:
         """
         Initialises a track from a csv file.
         """
-        blue, yellow = [], []
+        blue, yellow, large_orange = [], [], []
         all = []
         start_x, start_y, start_heading = 0.0, 0.0, 0.0
         with open(track_file, "r") as f:
@@ -147,6 +149,8 @@ class Track:
                     arr = blue
                 elif tag == "yellow":
                     arr = yellow
+                elif tag == "big_orange":
+                    arr = large_orange
                 elif tag == "car_start":
                     start_x = float(cols[1])
                     start_y = float(cols[2])
@@ -162,7 +166,7 @@ class Track:
                     )
         centreline, centreline_lines = Track.extract_centreline(all)
         return Track(
-            blue, yellow, centreline, centreline_lines,
+            blue, yellow, large_orange, centreline, centreline_lines,
             car_start = (start_x, start_y, start_heading),
             direction = 1 if str.replace(Path(track_file).name, ".csv", "")[-1] == "r" else -1
         )
@@ -213,6 +217,13 @@ class Track:
         new_car_pose.pose.pose.orientation.z = new_orientation[2]
         new_car_pose.pose.pose.orientation.w = new_orientation[3]
         return new_car_pose
+
+    def _get_finish_line(self):
+        c1 = self.large_orange_cones[1]  # these two cones are definitely not
+        c2 = self.large_orange_cones[2]  # on the same side of the track
+        return Line.make_line_from_cones(
+            c1, c2
+        )
 
     def _get_path_direction(self):
         return Line.get_direction(
@@ -487,22 +498,65 @@ def intersection_check(dataset: Dataset, track: Track, visualize = False):
     # plot the path up to first intersection,
     # or the entire path if there was none
     if visualize:
+        # plt.plot(
+        #     [c.pose.pose.position.x for _,c in car_poses[:intersection_idx + 1]],
+        #     [c.pose.pose.position.y for _,c in car_poses[:intersection_idx + 1]],
+        #     "-", color="black")
+        l = Line.make_line_from_car_state(
+            car_poses[intersection_idx][1]
+        )
         plt.plot(
-            [c.pose.pose.position.x for _,c in car_poses[:intersection_idx + 1]],
-            [c.pose.pose.position.y for _,c in car_poses[:intersection_idx + 1]],
-            "-", color="black")
+            [l.sx, l.ex],
+            [l.sy, l.ey],
+            "-", color="black"
+        )
             
         plt.show()
 
     return intersection, intersection_time
 
-def get_lap_times(dataset: Dataset, track: Track):
+def get_lap_times(dataset: Dataset, track: Track, min_lap_time = 60.0):
     """
     Finds intersections with starting cones to
     determine lap times.
     
     :param dataset: The dataset to use.
     :param track: The track associated with the dataset.
+    :param min_lap_time: A minimum time between laps or start of simulation.
+    This is not to discount fast laps but instead to prevent the system for
+    registering the same finish line intersection as multiple fast laps /
+    registering a lap in the first few seconds of the simulation
     :returns: A list of lap times.
     """
-    pass  # TODO
+    car_poses = dataset.get_msgs("ground_truth_state").fetchall()
+    car_poses = sorted([
+        (x[1], deserialize_message(x[2], CarState)) for x in car_poses
+    ],
+    key = lambda x: x[0]
+    )
+    car_poses = [
+        (ts, track.transform_car_pose(cp)) for ts, cp in car_poses
+    ]
+
+    first_timestamp = car_poses[0][0]
+    finish_line = track.finish_line
+    intersections = []
+
+    for timestamp, car_pose in car_poses:
+        t = (timestamp - first_timestamp) / 1e3
+        car_line = Line.make_line_from_car_state(
+            car_pose
+        )
+        if Line.intersection(car_line, finish_line):
+            intersections.append(t)
+
+    laps = []
+    cur_intersection = 0.0
+    for t in intersections:
+        if t - cur_intersection >= min_lap_time:
+            laps.append((cur_intersection, t))  # (start, end)
+            laptime = t - cur_intersection
+            print(f"LAP!\nStart: {cur_intersection} seconds.\nEnd: {t} seconds.\nTime: {laptime} seconds.")
+        cur_intersection = t
+
+    return laps

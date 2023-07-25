@@ -7,6 +7,8 @@ from matplotlib.animation import FuncAnimation
 import time
 from rclpy.serialization import deserialize_message
 from eufs_msgs.msg import CarState
+from scipy.spatial.transform import Rotation
+from eufs_msgs.msg import ConeArrayWithCovariance
 
 def main():
     assert len(sys.argv) > 1, "Please provide at least one database path."
@@ -26,6 +28,11 @@ def main():
             #     track,
             #     visualize=True
             # )
+            # analysis.get_lap_times(
+            #     dataset,
+            #     track
+            # )
+            # continue
             t = time.time()
             factor = 5.0
             start_time = dataset._connection.execute(
@@ -60,6 +67,11 @@ def main():
                     [x[1] for x in track.yellow_cones],
                     "o", color="yellow", markersize=2
                 )
+                ax1.plot(
+                    [track.finish_line.sx, track.finish_line.ex],
+                    [track.finish_line.sy, track.finish_line.ey],
+                    "-", color="green"
+                )
 
                 latest_car_pose = dataset._connection.execute(
                     "SELECT timestamp, data FROM ground_truth_state \
@@ -69,8 +81,10 @@ def main():
                 if latest_car_pose is None: return
                 else: latest_car_pose = deserialize_message(latest_car_pose[1], CarState)
                 latest_car_pose = track.transform_car_pose(latest_car_pose)
-                x, y = latest_car_pose.pose.pose.position.x, latest_car_pose.pose.pose.position.y
-                ax1.plot(x, y, "o", color="black")
+                latest_car_pose_line = analysis.Line.make_line_from_car_state(latest_car_pose)
+                ax1.plot([latest_car_pose_line.sx, latest_car_pose_line.ex],
+                         [latest_car_pose_line.sy, latest_car_pose_line.ey],
+                         "-", linewidth=5)
                 ax1.plot(
                     [track.ncent.sx, track.ncent.ex], [track.ncent.sy, track.ncent.ey],
                     "-", color="red"
