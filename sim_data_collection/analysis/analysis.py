@@ -482,6 +482,8 @@ def intersection_check(dataset: Dataset, track: Track, visualize = False):
     # iterate through each car pose and check for intersection with
     # all line segments.
     intersection = False
+    intersection_time = None
+    intersection_completion = None
     intersection_idx = len(car_poses)
     for car_pose_idx, (timestamp, car_pose) in enumerate(car_poses):
         if intersection == True: break
