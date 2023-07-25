@@ -84,8 +84,6 @@ class Track:
         )
         assert self.first_centreline is not None
         self.path_direction = self._get_path_direction()
-        print(f"Track is {'clockwise' if self.direction == 1 else 'anticlockwise'}")
-        print(f"Path is {'clockwise' if self.path_direction == 1 else 'anticlockwise'}")
 
     @staticmethod
     def extract_centreline(all_cones: List[Tuple[float, float, str]]) -> List[Tuple[float, float]]:
@@ -109,7 +107,6 @@ class Track:
                 prev_x, prev_y,
                 cur_x, cur_y
             ))
-        print(len(centreline), len(lines))
         return centreline, lines
 
     @staticmethod
@@ -493,7 +490,7 @@ def intersection_check(dataset: Dataset, track: Track, visualize = False):
             if Line.intersection(car_pose_line, cone_line):
                 intersection_time = (timestamp - car_poses[0][0]) / 1000 
                 intersection_completion, _ = track.get_completion(car_pose)
-                print(f"INTERSECTION! {intersection_time} seconds.")
+                # print(f"INTERSECTION! {intersection_time} seconds.")
                 intersection = True
                 intersection_idx = car_pose_idx
                 break
@@ -559,7 +556,7 @@ def get_lap_times(dataset: Dataset, track: Track, min_lap_time = 60.0):
         if t - cur_intersection >= min_lap_time:
             laps.append((cur_intersection, t))  # (start, end)
             laptime = t - cur_intersection
-            print(f"LAP!\nStart: {cur_intersection} seconds.\nEnd: {t} seconds.\nTime: {laptime} seconds.")
+            # print(f"LAP!\nStart: {cur_intersection} seconds.\nEnd: {t} seconds.\nTime: {laptime} seconds.")
         cur_intersection = t
 
     return laps

@@ -21,7 +21,6 @@ def visualise_data(db_paths: List[str],
     plot_percentage = True
     for db_path in db_paths:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
-        print(f"checking {db_path}")
         try:
             dataset.open(db_path)
             track = analysis.Track.track_from_db_path(db_path)
@@ -123,9 +122,14 @@ def analyse_data(db_paths: List[str]):
     completions = []
     finished_without_intersection = 0
     show = False
+    last_percentage = 0.0
     # TODO: lap time analysis
-    for db_path in db_paths:
+    for i,db_path in enumerate(db_paths):
         dataset.open(db_path)
+        percentage = (i+1) / len(db_paths)
+        if percentage - last_percentage >= 0.05:
+            last_percentage = percentage
+            print(f"{int(percentage*100)}%")
         track = analysis.Track.track_from_db_path(
             db_path
         )
