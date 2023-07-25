@@ -270,9 +270,7 @@ class Track:
             if reached_car == False:
                 distance += l
             total_distance += l
-        completion = distance / total_distance 
-        # if self.path_direction == self.direction: completion = 1 - completion
-        return completion, nearest
+        return distance, total_distance, nearest
 
     def get_completion(self, car_pose):
        """
@@ -285,11 +283,11 @@ class Track:
        """ 
        x = car_pose.pose.pose.position.x
        y = car_pose.pose.pose.position.y
-       completion, n = self._get_completion(
+       completion, total_distance, nearest = self._get_completion(
            x, y, self.centreline_lines, self.first_centreline
        )
-       self.ncent = n
-       return completion
+       self.ncent = nearest
+       return completion, total_distance
 
 class Line:
     def __init__(self, sx=0.0, sy=0.0, ex=0.0, ey=0.0):
