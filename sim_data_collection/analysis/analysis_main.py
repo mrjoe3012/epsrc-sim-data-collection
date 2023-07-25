@@ -11,6 +11,7 @@ from scipy.spatial.transform import Rotation
 from eufs_msgs.msg import ConeArrayWithCovariance
 from typing import List, Tuple
 import numpy as np
+import fcntl, json
 
 def visualise_data(db_paths: List[str],
                    time_factor=15.0):
@@ -116,11 +117,12 @@ def visualise_data(db_paths: List[str],
         finally:
             dataset.close()
 
-def analyse_data(db_paths: List[str]):
+def analyse_data(output_file: str, db_paths: List[str]):
     dataset = Dataset()
     intersections = []
     completions = []
     finished_without_intersection = 0
+    finished_with_intersection = 0
     show = False
     last_percentage = 0.0
     # TODO: lap time analysis
@@ -143,6 +145,7 @@ def analyse_data(db_paths: List[str]):
             if intersection == True:
                 intersections.append(time)
                 completions.append(completion)
+                finished_with_intersection += 1
             else:
                 finished_without_intersection += 1
             laps = analysis.get_lap_times(
@@ -152,6 +155,35 @@ def analyse_data(db_paths: List[str]):
         finally:
             dataset.close()
 
+    with open(output_file, "r+", encoding="ascii") as f:
+        fcntl.lockf(f, fcntl.LOCK_EX)
+        try:
+            data = json.load(f)
+        except:
+            data = {
+                "intersections" : [],
+                "completions" : [],
+                "finished_without_intersection" : 0,
+                "finished_with_intersection" : 0
+            }
+        data["intersections"].extend(intersections)
+        data["completions"].extend(completions)
+        data["finished_without_intersection"] += finished_without_intersection
+        data["finished_with_intersection"] += finished_with_intersection
+        f.truncate(0)
+        json.dump(data, f)
+        fcntl.lockf(f, fcntl.F_UNLCK) 
+
+def plot(data_path, show=False):
+
+    with open(data_path, "r", encoding="ascii") as f:
+        data = json.load(f)
+
+    finished_without_intersection = data["finished_without_intersection"]
+    finished_with_intersection = data["finished_with_intersection"]
+    completions = data["completions"]
+    intersections = data["intersections"]
+
     fig, axes = plt.subplots(
         1, 3,
     )
@@ -160,7 +192,7 @@ def analyse_data(db_paths: List[str]):
     ax.set_title("Failures")
     ax.set_ylabel("Number of runs")
     ax.hist(
-        ["No violations" for i in range(finished_without_intersection)] + ["At least 1 violation" for i in range(len(db_paths) - finished_without_intersection)],
+        ["No violations" for i in range(finished_without_intersection)] + ["At least 1 violation" for i in range(finished_with_intersection)],
         bins="auto"
     ) 
 
@@ -190,7 +222,9 @@ def analyse_data(db_paths: List[str]):
         plt.savefig("analysis")
 
 def usage():
-    print("ros2 run sim_data_collection analysis <analyse|visualise> <db1> <db2> ...")
+    print("ros2 run sim_data_collection analysis <output json> <db1> <db2> ...")
+    print("ros2 run sim_data_collection visualise <db1> <db2> ...")
+    print("ros2 run sim_data_collection plot <input json>")
 
 def main():
     if len(sys.argv) < 3:
@@ -199,14 +233,20 @@ def main():
         sys.exit(1)
     logger = logging.get_logger("analaysis")
     verb = sys.argv[1]
-    db_paths = sys.argv[2:]
     
     if verb == "visualise":
+        db_paths = sys.argv[2:]
         logger.info(f"Analysis starting up. Visualising {len(db_paths)} databases.")
         visualise_data(db_paths)
     elif verb == "analyse":
+        output_filename = sys.argv[2]
+        db_paths = sys.argv[3:]
         logger.info(f"Analysis starting up. Analysing {len(db_paths)} databases.")
-        analyse_data(db_paths)
+        analyse_data(output_filename, db_paths)
+    elif verb == "plot":
+        input_filename = sys.argv[2]
+        logger.info(f"Analysis starting up. Visualising data from {input_filename}.")
+        plot(input_filename, show=False)
     else:
         print(f"Unrecognised verb '{verb}'")
         usage()
