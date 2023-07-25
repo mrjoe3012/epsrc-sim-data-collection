@@ -10,6 +10,7 @@ from eufs_msgs.msg import CarState
 from scipy.spatial.transform import Rotation
 from eufs_msgs.msg import ConeArrayWithCovariance
 from typing import List, Tuple
+import numpy as np
 
 def visualise_data(db_paths: List[str],
                    time_factor=15.0):
@@ -118,23 +119,71 @@ def visualise_data(db_paths: List[str],
 
 def analyse_data(db_paths: List[str]):
     dataset = Dataset()
+    intersections = []
+    completions = []
+    finished_without_intersection = 0
+    show = False
+    # TODO: lap time analysis
     for db_path in db_paths:
         dataset.open(db_path)
         track = analysis.Track.track_from_db_path(
             db_path
         )
+        track_length = track.get_length()
         try:
-            analysis.intersection_check(
+            intersection, time, completion = analysis.intersection_check(
                 dataset,
                 track,
-                visualize=True
+                visualize=False
             )
-            analysis.get_lap_times(
+            if intersection == True:
+                intersections.append(time)
+                completions.append(completion)
+            else:
+                finished_without_intersection += 1
+            laps = analysis.get_lap_times(
                 dataset,
                 track
             )
         finally:
             dataset.close()
+
+    fig, axes = plt.subplots(
+        1, 3,
+    )
+
+    ax = axes[0] 
+    ax.set_title("Failures")
+    ax.set_ylabel("Number of runs")
+    ax.hist(
+        ["No violations" for i in range(finished_without_intersection)] + ["At least 1 violation" for i in range(len(db_paths) - finished_without_intersection)],
+        bins="auto"
+    ) 
+
+    ax = axes[1]
+    ax.set_title("Time to first intersection")
+    ax.set_xlabel("Time (seconds)")
+    ax.hist(
+        intersections,
+        bins="auto"
+    )
+
+    ax = axes[2]
+    ax.set_title("Overall track completion")
+    # TODO: if laps, we need to register this as part
+    # of the completion
+    # TODO: for this, add funciton aggregate_completion(time)
+    # so we can just use the laptime for this. remove return value
+    # of completion from intersection check after doing this
+    ax.set_xlabel("Distance (metres)")
+    ax.hist(
+        completions,
+        bins="auto"
+    )
+    if show == True:
+        plt.show()
+    else:
+        plt.savefig("analysis")
 
 def usage():
     print("ros2 run sim_data_collection analysis <analyse|visualise> <db1> <db2> ...")

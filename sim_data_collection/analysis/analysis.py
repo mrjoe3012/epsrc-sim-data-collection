@@ -218,6 +218,10 @@ class Track:
         new_car_pose.pose.pose.orientation.w = new_orientation[3]
         return new_car_pose
 
+    def get_length(self):
+        dist = np.sum([l.get_length() for l in self.centreline_lines])
+        return dist
+
     def _get_finish_line(self):
         c1 = self.large_orange_cones[1]  # these two cones are definitely not
         c2 = self.large_orange_cones[2]  # on the same side of the track
@@ -488,6 +492,7 @@ def intersection_check(dataset: Dataset, track: Track, visualize = False):
         for cone_line in cone_lines:
             if Line.intersection(car_pose_line, cone_line):
                 intersection_time = (timestamp - car_poses[0][0]) / 1000 
+                intersection_completion, _ = track.get_completion(car_pose)
                 print(f"INTERSECTION! {intersection_time} seconds.")
                 intersection = True
                 intersection_idx = car_pose_idx
@@ -511,7 +516,7 @@ def intersection_check(dataset: Dataset, track: Track, visualize = False):
             
         plt.show()
 
-    return intersection, intersection_time
+    return intersection, intersection_time, intersection_completion
 
 def get_lap_times(dataset: Dataset, track: Track, min_lap_time = 60.0):
     """
