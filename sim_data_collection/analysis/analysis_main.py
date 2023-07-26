@@ -172,7 +172,8 @@ def analyse_data(output_file: str, db_paths: List[str]):
         data["completions"].extend(completions)
         data["finished_without_intersection"] += finished_without_intersection
         data["finished_with_intersection"] += finished_with_intersection
-        f.truncate(0)
+        f.seek(0)
+        f.truncate()
         filecontents = json.dumps(data)
         f.write(filecontents)
         fcntl.flock(f, fcntl.F_UNLCK) 
