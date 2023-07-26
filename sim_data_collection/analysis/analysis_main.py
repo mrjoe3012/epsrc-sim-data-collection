@@ -159,13 +159,14 @@ def analyse_data(output_file: str, db_paths: List[str]):
         fcntl.lockf(f, fcntl.LOCK_EX)
         try:
             data = json.load(f)
-        except:
+        except Exception as e:
             data = {
                 "intersections" : [],
                 "completions" : [],
                 "finished_without_intersection" : 0,
                 "finished_with_intersection" : 0
             }
+            print(f"An exception occured whilst reading json file: {e}")
         data["intersections"].extend(intersections)
         data["completions"].extend(completions)
         data["finished_without_intersection"] += finished_without_intersection
