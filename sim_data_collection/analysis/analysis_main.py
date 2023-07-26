@@ -156,7 +156,7 @@ def analyse_data(output_file: str, db_paths: List[str]):
             dataset.close()
 
     with open(output_file, "r+", encoding="ascii") as f:
-        fcntl.lockf(f, fcntl.LOCK_EX)
+        fcntl.flock(f, fcntl.LOCK_EX)
         try:
             data = json.load(f)
         except Exception as e:
@@ -173,7 +173,7 @@ def analyse_data(output_file: str, db_paths: List[str]):
         data["finished_with_intersection"] += finished_with_intersection
         f.truncate(0)
         json.dump(data, f)
-        fcntl.lockf(f, fcntl.F_UNLCK) 
+        fcntl.flock(f, fcntl.F_UNLCK) 
 
 def plot(data_path, show=False):
 
