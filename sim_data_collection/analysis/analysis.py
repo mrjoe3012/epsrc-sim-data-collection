@@ -255,7 +255,7 @@ class Track:
             x, y,
             lines
         )
-        if not nearest_proj or dist > MAX_DIST: return math.nan, Line()
+        if not nearest_proj or dist > MAX_DIST: return 0.0, self.get_length(), Line()
         (nearest, int_x, int_y) = nearest_proj
         remainder = np.sqrt((int_x - nearest.sx)**2 + (int_y - nearest.sy)**2)
         first_idx = lines.index(first_line)
