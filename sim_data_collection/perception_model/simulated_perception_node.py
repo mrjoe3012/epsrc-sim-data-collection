@@ -2,7 +2,9 @@ from rclpy.node import Node as ROSNode
 from eufs_msgs.msg import ConeArrayWithCovariance, CarState
 from ugrdv_msgs.msg import Cone3dArray, Cone3d
 from scipy.spatial.transform import Rotation
+from typing import List, Tuple
 import math
+import numpy as np
 
 class Node(ROSNode):
     def __init__(self):
@@ -98,13 +100,33 @@ class Node(ROSNode):
         ## TODO: parameterise the node
         self.pubs["simulated_perception"].publish(cropped_cones)
 
-    def crop_to_fov(self, cones, car_state, fov):
+    def crop_to_fov(self, cones: List[Cone3d],
+                    car_state: dict, fov: float,
+                    max_distance: float) -> List[Cone3d]:
         result = []
+        x, y, yaw = car_state["x"], car_state["y"], car_state["yaw"]
+        fmin, fmax = -fov/2, fov/2
+        rot = np.array([
+            [np.cos(yaw), np.sin(yaw)],
+            [-np.sin(yaw), np.cos(yaw)]
+        ])
+        carpos = np.array([
+            [x],
+            [y]
+        ])
         for cone in cones.cones:
             # put into local frame
+            conepos = np.array([
+                [x],
+                [y]
+            ])
+            conepos = rot @ (conepos - carpos)
             # check angle
+            theta = math.atan2(conepos[1], conepos[0])
             # check distance
+            dist = np.linalg.norm(conepos) 
             # add to result if good
-            pass
-        assert False, "not implemented"
+            if theta >= fmin and theta <= fmax and dist <= max_distance:
+                result.append(cone)
+
         return result
