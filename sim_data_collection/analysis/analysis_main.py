@@ -180,6 +180,13 @@ def analyse_data(output_file: str, db_paths: List[str]):
 
 def plot(data_path, show=False):
 
+    def show(title):
+        if show == True:
+            plt.title(title)
+            plt.show()
+        else:
+            plt.savefig(title)
+
     with open(data_path, "r", encoding="ascii") as f:
         data = json.load(f)
 
@@ -189,18 +196,23 @@ def plot(data_path, show=False):
     intersections = data["intersections"]
 
     fig, axes = plt.subplots(
-        1, 3,
+        1,
     )
 
-    ax = axes[0] 
-    ax.set_title("Failures")
+    ax = axes
     ax.set_ylabel("Number of runs")
     ax.hist(
         ["No violations" for i in range(finished_without_intersection)] + ["At least 1 violation" for i in range(finished_with_intersection)],
         bins="auto"
     ) 
 
-    ax = axes[1]
+    show("violations")
+
+    fig, axes = plt.subplots(
+        2, 1
+    )
+
+    ax = axes[0]
     ax.set_title("Time to first intersection")
     ax.set_xlabel("Time (seconds)")
     ax.hist(
@@ -208,7 +220,7 @@ def plot(data_path, show=False):
         bins="auto"
     )
 
-    ax = axes[2]
+    ax = axes[1]
     ax.set_title("Overall track completion")
     # TODO: if laps, we need to register this as part
     # of the completion
@@ -220,10 +232,24 @@ def plot(data_path, show=False):
         completions,
         bins="auto"
     )
-    if show == True:
-        plt.show()
-    else:
-        plt.savefig("analysis")
+
+    show("completion")
+
+    fig, axes = plt.subplots(
+        1
+    )
+
+    ax = axes
+    ax.set_ylabel("Distance (metres)")
+    ax.set_xlabel("Time (seconds)")
+    ax.plot(
+        [i for i in intersections],
+        [c for c in completions],
+        "o"
+    )
+
+    show("intersection_completion")
+
 
 def usage():
     print("ros2 run sim_data_collection analysis <output json> <db1> <db2> ...")
