@@ -1,7 +1,11 @@
 from setuptools import setup
 
 package_name = 'sim_data_collection'
-submodules = ['sim_data_collection/data_collector', 'sim_data_collection/analysis']
+submodules = [
+    'sim_data_collection/data_collector',
+    'sim_data_collection/analysis',
+    'sim_data_collection/perception_model'
+]
 
 setup(
     name=package_name,
@@ -23,7 +27,8 @@ setup(
         'console_scripts': [
             'data_collector = sim_data_collection.data_collector.main:main',
             'integrity_check = sim_data_collection.analysis.integrity_check:main',
-            "analysis = sim_data_collection.analysis.analysis_main:main"
+            "analysis = sim_data_collection.analysis.analysis_main:main",
+            "perception_model = sim_data_collection.perception_model.main:main",
         ],
     },
 )
