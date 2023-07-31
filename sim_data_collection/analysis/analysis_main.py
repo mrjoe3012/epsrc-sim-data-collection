@@ -128,10 +128,7 @@ def visualise_data(db_paths: List[str],
 
 def analyse_data(output_file: str, db_paths: List[str]):
     dataset = Dataset()
-    intersections = []
-    completions = []
-    finished_without_intersection = 0
-    finished_with_intersection = 0
+    violations = []
     show = False
     last_percentage = 0.0
     # TODO: lap time analysis
@@ -144,19 +141,13 @@ def analyse_data(output_file: str, db_paths: List[str]):
         track = analysis.Track.track_from_db_path(
             db_path
         )
-        track_length = track.get_length()
         try:
-            intersection, time, completion = analysis.intersection_check(
+            violation_info = analysis.violation_check(
                 dataset,
                 track,
-                visualize=False
+                visualise=show
             )
-            if intersection == True:
-                intersections.append(time)
-                completions.append(completion)
-                finished_with_intersection += 1
-            else:
-                finished_without_intersection += 1
+            violations.append(violation_info.to_dict())
             laps = analysis.get_lap_times(
                 dataset,
                 track
@@ -171,16 +162,10 @@ def analyse_data(output_file: str, db_paths: List[str]):
             data = json.loads(filecontents)
         except Exception as e:
             data = {
-                "intersections" : [],
-                "completions" : [],
-                "finished_without_intersection" : 0,
-                "finished_with_intersection" : 0
+                "violations" : [],
             }
-            print(f"An exception occured whilst reading json file: {e}")
-        data["intersections"].extend(intersections)
-        data["completions"].extend(completions)
-        data["finished_without_intersection"] += finished_without_intersection
-        data["finished_with_intersection"] += finished_with_intersection
+            print(f"An exception occured whilst reading json file: {e}\nWriting to json anyway.")
+        data["violations"].extend(violations)
         f.seek(0)
         f.truncate()
         filecontents = json.dumps(data)

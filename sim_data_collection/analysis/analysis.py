@@ -545,15 +545,29 @@ class ViolationInfo:
         self.type = type
         self.time = time
         self.completion = completion
+    
+    def to_dict(self):
+        return {
+            'type' : self.type,
+            'time' : self.time,
+            'completion' : self.completion
+        }
+    @staticmethod
+    def from_dict(dict: Dict):
+        return ViolationInfo(
+            dict['type'],
+            dict['time'],
+            dict['completion']
+        )
 
-def intersection_check(dataset: Dataset, track: Track, visualize = False):
+def violation_check(dataset: Dataset, track: Track, visualise = False) -> ViolationInfo:
     """
-    Check a database for any track intersections.
+    Check a database for any track violations.
     
     :param dataset: The dataset to check.
     :param track: The track which the dataset was created from.
     :param visualize: Plot the results.
-    :returns: Whether or not there exists an intersection and the time at which it occurs.
+    :returns: A ViolationInfo instance describing the violation.
     """
     # construct lines from track cones
     blue_cone_lines, yellow_cone_lines = track.blue_cone_lines, track.yellow_cone_lines
@@ -568,53 +582,67 @@ def intersection_check(dataset: Dataset, track: Track, visualize = False):
     key = lambda data: data[0]
     )
 
-    # draw track and starting point
-    if visualize:
-        for line in blue_cone_lines:
-            plt.plot([line.sx, line.ex], [line.sy, line.ey], "-", color="blue")
-        for line in yellow_cone_lines:
-            plt.plot([line.sx, line.ex], [line.sy, line.ey], "-", color="yellow")
-        plt.plot([track.car_start[0]], [track.car_start[1]], "o", color="red", markersize=15)
-
-
     # iterate through each car pose and check for intersection with
     # all line segments.
-    intersection = False
-    intersection_time = None
-    intersection_completion = None
-    intersection_idx = len(car_poses)
+    backwards_detector = BackwardsDetector(track=track)
+    result = ViolationInfo("none", -1.0, -1.0)
+    final_car_pose_line = None
     for car_pose_idx, (timestamp, car_pose) in enumerate(car_poses):
-        if intersection == True: break
+        time = (timestamp - car_poses[0][0]) / 1000 
+        completion, _ = track.get_completion(car_pose)
+        # check for intersection
         car_pose_line = Line.make_line_from_car_state(car_pose)
+        final_car_pose_line = car_pose_line
         for cone_line in cone_lines:
             if Line.intersection(car_pose_line, cone_line):
-                intersection_time = (timestamp - car_poses[0][0]) / 1000 
-                intersection_completion, _ = track.get_completion(car_pose)
-                # print(f"INTERSECTION! {intersection_time} seconds.")
-                intersection = True
-                intersection_idx = car_pose_idx
+                result.type = "intersection"
+                result.completion = completion
+                result.time = time
                 break
-    
-    # plot the path up to first intersection,
-    # or the entire path if there was none
-    if visualize:
-        # plt.plot(
-        #     [c.pose.pose.position.x for _,c in car_poses[:intersection_idx + 1]],
-        #     [c.pose.pose.position.y for _,c in car_poses[:intersection_idx + 1]],
-        #     "-", color="black")
-        l = Line.make_line_from_car_state(
-            car_poses[intersection_idx][1]
-        )
-        plt.plot(
-            [l.sx, l.ex],
-            [l.sy, l.ey],
-            "-", color="black"
-        )
-            
+        if result.type != "none": break  # early break
+        # check for backwards driving
+        backwards_detector.add_completion(completion, time)
+        # backwards_driving, _ = backwards_detector.is_violating()
+        backwards_driving = False
+        if backwards_driving:
+            result.type = "backwards"
+            result.completion = completion
+            result.time = time
+        if result.type != "none": break  # early break
+
+    # visualise
+    if visualise == True:
+        if result.type == "none":
+            print("No violations.")
+        elif result.type == "intersection":
+            print(f"Intersection at {result.time}.2f seconds")
+        elif result.type == "backwards":
+            print(f"Backwards driving at {result.time}.2f seconds")
+        for line in yellow_cone_lines:
+            plt.plot(
+                [line.sx, line.ex],
+                [line.sy, line.ey],
+                "-",
+                color="yellow"
+            )
+        for line in blue_cone_lines:
+            plt.plot(
+                [line.sx, line.ex],
+                [line.sy, line.ey],
+                "-",
+                color="blue"
+            )
+        if final_car_pose_line is not None:
+            plt.plot(
+                [final_car_pose_line.sx, final_car_pose_line.ex],
+                [final_car_pose_line.sy, final_car_pose_line.ey],
+                "-",
+                color="black"
+            )
         plt.show()
 
-    return intersection, intersection_time, intersection_completion
-
+    return result
+    
 def get_lap_times(dataset: Dataset, track: Track, min_lap_time = 60.0):
     """
     Finds intersections with starting cones to
