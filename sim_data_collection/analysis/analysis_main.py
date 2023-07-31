@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation
 from eufs_msgs.msg import ConeArrayWithCovariance
 from typing import List, Tuple
 import numpy as np
-import fcntl, json
+import fcntl, json, signal
 
 def visualise_data(db_paths: List[str],
                    time_factor=15.0):
