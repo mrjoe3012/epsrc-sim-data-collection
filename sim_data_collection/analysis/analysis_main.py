@@ -25,6 +25,10 @@ def visualise_data(db_paths: List[str],
         try:
             dataset.open(db_path)
             track = analysis.Track.track_from_db_path(db_path)
+            backwards_detector = analysis.BackwardsDetector(
+                track = track,
+                verbose = True
+            )
             t = time.time()
             start_time = dataset._connection.execute(
                 "SELECT timestamp, data FROM ground_truth_state ORDER BY timestamp ASC"
@@ -106,6 +110,11 @@ def visualise_data(db_paths: List[str],
                 else:
                     ax2.set_ylim((0, total_distance*1.5))
                 completions.append((sim_time / 1e3, completion))
+                backwards_detector.add_completion(
+                    completions[-1][0],
+                    completions[-1][1]    
+                )
+                backwards_detector.is_violating()
                 ax2.plot(
                     [c[0] for c in completions],
                     [c[1] for c in completions],
