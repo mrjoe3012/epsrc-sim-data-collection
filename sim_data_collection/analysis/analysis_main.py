@@ -184,10 +184,33 @@ def plot(data_path, show=False):
     with open(data_path, "r", encoding="ascii") as f:
         data = json.load(f)
 
-    finished_without_intersection = data["finished_without_intersection"]
-    finished_with_intersection = data["finished_with_intersection"]
-    completions = data["completions"]
-    intersections = data["intersections"]
+    all_runs = [
+        analysis.ViolationInfo.from_dict(x) for x in data['violations']
+    ]
+
+    intersections = [
+        v for v in all_runs if v.type == "intersection"
+    ]
+
+    backwards = [
+        v for v in all_runs if v.type == "backwards"
+    ]
+
+    success = [
+        v for v in all_runs if v.type == "none"
+    ]
+
+    finished_with_intersection = len(intersections)
+    finished_with_backwards = len(backwards)
+    finished_without_violation = len(success)
+
+    failure_time = [
+        v.time for v in backwards + intersections
+    ]
+
+    completions = [
+        v.completion for v in all_runs
+    ]
 
     fig, axes = plt.subplots(
         1,
@@ -196,7 +219,7 @@ def plot(data_path, show=False):
     ax = axes
     ax.set_ylabel("Number of runs")
     ax.hist(
-        ["No violations" for i in range(finished_without_intersection)] + ["At least 1 violation" for i in range(finished_with_intersection)],
+        ["No violations" for i in range(finished_without_violation)] + ["Track intersection" for i in range(finished_with_intersection)] + ["Driving the wrong way" for i in range(finished_with_backwards)],
         bins="auto"
     ) 
 
@@ -207,10 +230,10 @@ def plot(data_path, show=False):
     )
 
     ax = axes[0]
-    ax.set_title("Time to first intersection")
+    ax.set_title("Time to first violation")
     ax.set_xlabel("Time (seconds)")
     ax.hist(
-        intersections,
+        failure_time,
         bins="auto"
     )
 
@@ -237,8 +260,8 @@ def plot(data_path, show=False):
     ax.set_ylabel("Distance (metres)")
     ax.set_xlabel("Time (seconds)")
     ax.plot(
-        [i for i in intersections],
-        [c for c in completions],
+        [v.time for v in backwards + intersections],
+        [v.completion for v in backwards + intersections],
         "o"
     )
 
