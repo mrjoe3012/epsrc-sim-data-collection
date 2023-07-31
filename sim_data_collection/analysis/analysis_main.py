@@ -257,6 +257,11 @@ def usage():
     print("ros2 run sim_data_collection plot <input json>")
 
 def main():
+    signal.signal(
+        signal.SIGINT,
+        lambda _, __: sys.exit(1)
+    )
+
     if len(sys.argv) < 3:
         print("Not enough arguments")
         usage()
