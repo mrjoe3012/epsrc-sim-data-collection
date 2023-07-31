@@ -363,7 +363,7 @@ class BackwardsDetector:
         completions_delta = self._get_completion_sum()
         first_time = self._completions_buffer[0][0]
         last_time = self._completions_buffer[-1][0]
-        if completions_delta < self._small_negative_threshold:
+        if completions_delta < -self._small_negative_threshold:
             if self._verbose: print(f"{last_time}: More backwards than forwards")
             if completions_delta < -self._large_negative_threshold * self._track_len:
                 if self._verbose: print(f"Likely that a lap was completed. Ignoring potential violadtion.")
