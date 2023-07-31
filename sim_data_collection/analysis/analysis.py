@@ -530,6 +530,22 @@ class Line:
             and Line._ccw(ax, ay, bx, by, cx, cy) \
             != Line._ccw(ax, ay, bx, by, dx, dy)
 
+class ViolationInfo:
+    def __init__(self, type: str, time: float, completion: float):
+        """
+        A struct describing a track violation.
+        'type' can be one of the following:
+          - 'none' : no violations, in this case 'time' is irrelevant
+          - 'intersection' : car intersected track boundaries
+          - 'backwards' : car went against the direction of the track
+        :param type: The type of violation as detailed above.
+        :param time: The time of the intersection in seconds.
+        :param completion: The car's track completion in metres at the time of violation.
+        """
+        self.type = type
+        self.time = time
+        self.completion = completion
+
 def intersection_check(dataset: Dataset, track: Track, visualize = False):
     """
     Check a database for any track intersections.
