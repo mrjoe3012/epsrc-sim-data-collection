@@ -290,6 +290,87 @@ class Track:
        self.ncent = nearest
        return completion, total_distance
 
+class BackwardsDetector:
+    def __init__(self, track: Track,
+                 small_negative_t = 5.0,
+                 large_negative_t = 0.8,
+                 num_seconds_to_keep = 3.0,
+                 verbose = False):
+        """
+        This is a class which encapsulates the algorithm for detecting
+        backwards travelling during a simulation run. This works by
+        sequentially analysing the car's track completion per timestep.
+        If the track completion in the last N seconds exceeds some small
+        negative threshold we consider this a violation. However, if the
+        track completion exceeds a large negative threshold, we ignore this
+        as the car has likely just completed a lap (gone from 100% completion to 0%).
+        :param track: The track that is currently being driven.
+        :param small_negative_t: A threshold in metres which must be exceeded
+        negatively to consider the current state as a violation.
+        :param large_negative_t: The percentage of the total track length
+        to be exceeded in order for a potential violation to be ignored
+        due to it likely being the completion of a lap.
+        :param num_seconds_to_keep: Maximum number of seconds of completion
+        data to be analysed at once.
+        :param verbose: Set to true for debug prints.
+        """
+        self._small_negative_threshold = small_negative_t  # metres
+        self._large_negative_threshold = large_negative_t  # percentage of track length
+        self._number_of_seconds_to_analyse = num_seconds_to_keep  # how many seconds of completion data we store at once
+        self._completions_buffer = []
+        self._verbose = verbose
+        self._track = track
+
+    def _trim_buffer(self) -> None:
+        """
+        Ensures the completions buffer contains only data
+        within the last n seconds. 
+        """
+        j = 0
+        while j < len(self._completions_buffer) - 1 \
+            and self._completions_buffer[-1][0] - self._completions_buffer[0][0] > self._number_of_seconds_to_analyse:
+            j += 1
+        self._completions_buffer = self._completions_buffer[j:]
+
+    def _get_completion_sum(self) -> float:
+        """
+        Calculate the sum of completion deltas. 
+        """
+        c = self._completions_buffer
+        return sum([
+            c[i + 1][1] - c[i][1] for i in range(len(c) - 1)
+        ])
+
+    def add_completion(self, time: float, distance: float) -> None:
+        """
+        Register the car's completion at a timestep. These values must be
+        added in chronological order.
+        :param time: The time at which this completion occurs.
+        :param distance: The track completion in metres.
+        """
+        self._completions_buffer.append((time, distance))
+
+    def is_violating(self) -> Tuple[bool, float]:
+        """
+        Get whether or not the car is currently committing a violation
+        by driving backwards. If a violation is being committed, the second
+        element is the time at which the violation begins.
+        :returns: Whether or not a violation is being committed, and the time
+        of the violation.
+        """
+        self._trim_buffer()
+        completions_delta = self._get_completion_sum()
+        first_time = self._completions_buffer[0][0]
+        last_time = self._completions_buffer[-1][0]
+        if completions_delta < self._small_negative_threshold:
+            if self._verbose: print(f"{last_time}: More backwards than forwards")
+            if completions_delta < -self._large_negative_threshold * self._track.get_length():
+                if self._verbose: print(f"Likely that a lap was completed. Ignoring potential violadtion.")
+            else:
+                if self._verbose: print(f"No lap completion in sight. Violation has occured.")
+                return (True, first_time)
+        return (False, -1.0)
+
 class Line:
     def __init__(self, sx=0.0, sy=0.0, ex=0.0, ey=0.0):
         """
