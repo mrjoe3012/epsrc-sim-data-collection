@@ -320,6 +320,7 @@ class BackwardsDetector:
         self._completions_buffer = []
         self._verbose = verbose
         self._track = track
+        self._track_len = track.get_length()
 
     def _trim_buffer(self) -> None:
         """
@@ -338,7 +339,7 @@ class BackwardsDetector:
         """
         c = self._completions_buffer
         return sum([
-            c[i + 1][1] - c[i][1] for i in range(len(c) - 1)
+            self._track_len * (c[i + 1][1] - c[i][1]) for i in range(len(c) - 1)
         ])
 
     def add_completion(self, time: float, distance: float) -> None:
@@ -364,7 +365,7 @@ class BackwardsDetector:
         last_time = self._completions_buffer[-1][0]
         if completions_delta < self._small_negative_threshold:
             if self._verbose: print(f"{last_time}: More backwards than forwards")
-            if completions_delta < -self._large_negative_threshold * self._track.get_length():
+            if completions_delta < -self._large_negative_threshold * self._track_len:
                 if self._verbose: print(f"Likely that a lap was completed. Ignoring potential violadtion.")
             else:
                 if self._verbose: print(f"No lap completion in sight. Violation has occured.")
