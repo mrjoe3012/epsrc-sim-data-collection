@@ -560,6 +560,27 @@ class ViolationInfo:
             dict['completion']
         )
 
+class SimulationRun:
+    def __init__(self, violation: ViolationInfo, lap_times: List[Tuple[float, float]]):
+        """
+        Contains all data about a simulation run.
+        :param violation: The violation info produced by the check.
+        :param lap_times:
+        """
+        self.violation = violation
+        self.lap_times = lap_times
+    def to_dict(self):
+        return {
+            'violation' : self.violation.to_dict(),
+            'lap_times' : list(self.lap_times)
+        }
+    @staticmethod
+    def from_dict(dict: Dict):
+        return SimulationRun(
+            ViolationInfo.from_dict(dict['violation']),
+            list(dict['lap_times']) 
+        )
+
 def violation_check(dataset: Dataset, track: Track, visualise = False) -> ViolationInfo:
     """
     Check a database for any track violations.
@@ -643,7 +664,7 @@ def violation_check(dataset: Dataset, track: Track, visualise = False) -> Violat
 
     return result
     
-def get_lap_times(dataset: Dataset, track: Track, min_lap_time = 60.0):
+def get_lap_times(dataset: Dataset, track: Track, min_lap_time = 60.0) -> List[Tuple[float, float]]:
     """
     Finds intersections with starting cones to
     determine lap times.

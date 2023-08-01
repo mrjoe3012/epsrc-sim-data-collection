@@ -128,10 +128,9 @@ def visualise_data(db_paths: List[str],
 
 def analyse_data(output_file: str, db_paths: List[str]):
     dataset = Dataset()
-    violations = []
+    sim_runs = []
     show = False
     last_percentage = 0.0
-    # TODO: lap time analysis
     for i,db_path in enumerate(db_paths):
         dataset.open(db_path)
         percentage = (i+1) / len(db_paths)
@@ -147,11 +146,15 @@ def analyse_data(output_file: str, db_paths: List[str]):
                 track,
                 visualise=show
             )
-            violations.append(violation_info.to_dict())
             laps = analysis.get_lap_times(
                 dataset,
                 track
             )
+            sim_run = analysis.SimulationRun(
+                violation_info,
+                laps
+            )
+            sim_runs.append(sim_run.to_dict())
         finally:
             dataset.close()
 
@@ -162,10 +165,10 @@ def analyse_data(output_file: str, db_paths: List[str]):
             data = json.loads(filecontents)
         except Exception as e:
             data = {
-                "violations" : [],
+                "sim_runs" : [],
             }
             print(f"An exception occured whilst reading json file: {e}\nWriting to json anyway.")
-        data["violations"].extend(violations)
+        data["sim_runs"].extend(sim_runs)
         f.seek(0)
         f.truncate()
         filecontents = json.dumps(data)
@@ -185,19 +188,19 @@ def plot(data_path, show=False):
         data = json.load(f)
 
     all_runs = [
-        analysis.ViolationInfo.from_dict(x) for x in data['violations']
+        analysis.SimulationRun.from_dict(x) for x in data['sim_runs']
     ]
 
     intersections = [
-        v for v in all_runs if v.type == "intersection"
+        run.violation for run in all_runs if run.violation.type == "intersection"
     ]
 
     backwards = [
-        v for v in all_runs if v.type == "backwards"
+        run.violation for run in all_runs if run.violation.type == "backwards"
     ]
 
     success = [
-        v for v in all_runs if v.type == "none"
+        run.violation for run in all_runs if run.violation.type == "none"
     ]
 
     finished_with_intersection = len(intersections)
@@ -209,7 +212,7 @@ def plot(data_path, show=False):
     ]
 
     completions = [
-        v.completion for v in all_runs
+        run.violation.completion for run in all_runs
     ]
 
     fig, axes = plt.subplots(
