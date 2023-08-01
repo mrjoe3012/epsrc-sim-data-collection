@@ -1,5 +1,5 @@
 from rclpy.node import Node as ROSNode
-from eufs_msgs.msg import ConeArrayWithCovariance, CarState
+from eufs_msgs.msg import ConeArrayWithCovariance, CarState, ConeWithCovariance
 from ugrdv_msgs.msg import Cone3dArray, Cone3d
 from scipy.spatial.transform import Rotation
 from typing import List, Tuple
@@ -26,8 +26,8 @@ class Node(ROSNode):
         } 
         self.pubs = {
             "simulated_perception" : self.create_publisher(
-                Cone3dArray,
-                "/ugrdv/perception/map",
+                ConeArrayWithCovariance,
+                "/ugrdv/perception/epsrc_cones",
                 1
             )
         }
@@ -48,7 +48,7 @@ class Node(ROSNode):
         self.last_gt_cones = self.convert_eufs_cones(msg)
 
     def on_gt_car_state(self, msg):
-        self.get_logger().info("Car: (%d, %d, %d)" % (msg.pose.pose.position.x, msg.pose.pose.position.y))
+        self.get_logger().info("Car: (%d, %d, %d)" % (msg.pose.pose.position.x, msg.pose.pose.position.y, self.get_car_heading(msg)))
         x, y = msg.pose.pose.position.x, msg.pose.pose.position.y
         yaw = self.get_car_heading(msg)
         self.last_car_state["x"] = x
@@ -74,10 +74,11 @@ class Node(ROSNode):
                 ugr.position.x = eufs.point.x
                 ugr.position.y = eufs.point.y
                 ugr.colour = colour
-                new_arr.apend(ugr)
+                new_arr.append(ugr)
             return new_arr
 
         result = Cone3dArray()
+        result.header = msg.header
         result.cones = \
             do_array(msg.blue_cones, Cone3d.BLUE) + \
             do_array(msg.yellow_cones, Cone3d.YELLOW) + \
@@ -86,24 +87,47 @@ class Node(ROSNode):
             do_array(msg.unknown_color_cones ,Cone3d.UNKNOWN)
         return result
 
+    def convert_ugr_cones(self, cones):
+        new = ConeArrayWithCovariance()
+        new.header = cones.header
+        for cone in cones.cones:
+            eufs = ConeWithCovariance()
+            eufs.point.x = cone.position.x
+            eufs.point.y = cone.position.y
+            if cone.colour == Cone3d.BLUE:
+                new.blue_cones.append(eufs)
+            elif cone.colour == Cone3d.YELLOW:
+                new.yellow_cones.append(eufs)
+            elif cone.colour == Cone3d.ORANGE:
+                new.orange_cones.append(eufs)
+            elif cone.colour == Cone3d.LARGEORANGE:
+                new.big_orange_cones.append(eufs)
+            else:
+                new.unknown_color_cones.append(eufs)
+        return new
+
     def timer_callback(self):
         self.publish()
 
     def publish(self):
         fov = math.radians(110.0)
+        distance = 12.0
         cropped_cones = self.crop_to_fov(
             self.last_gt_cones,
             self.last_car_state,
-            fov
+            fov,
+            distance
         )
         ## TODO: add in the model
         ## TODO: parameterise the node
-        self.pubs["simulated_perception"].publish(cropped_cones)
+        cropped_cones_eufs = self.convert_ugr_cones(cropped_cones)
+        self.pubs["simulated_perception"].publish(cropped_cones_eufs)
 
     def crop_to_fov(self, cones: List[Cone3d],
                     car_state: dict, fov: float,
                     max_distance: float) -> List[Cone3d]:
-        result = []
+        conearray = Cone3dArray()
+        result = conearray.cones
         x, y, yaw = car_state["x"], car_state["y"], car_state["yaw"]
         fmin, fmax = -fov/2, fov/2
         rot = np.array([
@@ -117,16 +141,16 @@ class Node(ROSNode):
         for cone in cones.cones:
             # put into local frame
             conepos = np.array([
-                [x],
-                [y]
+                [cone.position.x],
+                [cone.position.y]
             ])
             conepos = rot @ (conepos - carpos)
             # check angle
             theta = math.atan2(conepos[1], conepos[0])
             # check distance
-            dist = np.linalg.norm(conepos) 
+            dist = np.linalg.norm(conepos, ord=1) 
             # add to result if good
             if theta >= fmin and theta <= fmax and dist <= max_distance:
                 result.append(cone)
 
-        return result
+        return conearray
