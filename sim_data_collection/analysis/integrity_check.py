@@ -27,6 +27,7 @@ def main():
                 ) 
             except analysis.DatabaseIntegrityError as e:
                 logger.error(str(e))
+                raise e
     except Exception as e:
         logger.error(f"An error has occured: {e}")
         success = False
