@@ -608,12 +608,15 @@ def violation_check(dataset: Dataset, track: Track, visualise = False) -> Violat
     backwards_detector = BackwardsDetector(track=track)
     result = ViolationInfo("none", -1.0, -1.0)
     final_car_pose_line = None
+    final_completion, final_time = None, None
     for car_pose_idx, (timestamp, car_pose) in enumerate(car_poses):
         time = (timestamp - car_poses[0][0]) / 1000 
         completion, _ = track.get_completion(car_pose)
         # check for intersection
         car_pose_line = Line.make_line_from_car_state(car_pose)
         final_car_pose_line = car_pose_line
+        final_completion = completion
+        final_time = time
         for cone_line in cone_lines:
             if Line.intersection(car_pose_line, cone_line):
                 result.type = "intersection"
@@ -630,6 +633,12 @@ def violation_check(dataset: Dataset, track: Track, visualise = False) -> Violat
             result.completion = completion
             result.time = time
         if result.type != "none": break  # early break
+
+    # if no violation occured, use the final car pose
+    # to set a completion and time
+    if result.type == "none":
+        result.completion = final_completion
+        result.time = final_time
 
     # visualise
     if visualise == True:
