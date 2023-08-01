@@ -9,7 +9,7 @@ import sim_data_collection.perception_model.model as perception_model
 ## TODO: parameterise the node
 
 class Node(ROSNode):
-    def __init__(self, model_name = "good"):
+    def __init__(self):
         super().__init__("simulated_perception_node")
         # set up publishers and subscriptions
         self.subs = {
@@ -44,6 +44,8 @@ class Node(ROSNode):
             "yaw" : 0.0
         }
         self.last_gt_cones = Cone3dArray()
+        self.declare_parameter("model", "realistic")
+        model_name = self.get_parameter("model").value
         self.perception_model = self.load_model(model_name)
 
     def load_model(self, name):
@@ -385,11 +387,9 @@ class Node(ROSNode):
         return perception_model.PerceptionModel(probs)
     
     def on_gt_cones(self, msg):
-        self.get_logger().info("Got %d blue cones." % (len(msg.blue_cones)))
         self.last_gt_cones = self.convert_eufs_cones(msg)
 
     def on_gt_car_state(self, msg):
-        self.get_logger().info("Car: (%d, %d, %d)" % (msg.pose.pose.position.x, msg.pose.pose.position.y, self.get_car_heading(msg)))
         x, y = msg.pose.pose.position.x, msg.pose.pose.position.y
         yaw = self.get_car_heading(msg)
         self.last_car_state["x"] = x
