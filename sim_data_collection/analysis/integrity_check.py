@@ -21,13 +21,9 @@ def main():
             if new_progress - progress >= 1:
                 logger.info(f"PROGRESS: {new_progress}%")
                 progress = new_progress
-            try:
-                analysis.integrity_check_db(
-                    db_path
-                ) 
-            except analysis.DatabaseIntegrityError as e:
-                logger.error(str(e))
-                raise e
+            analysis.integrity_check_db(
+                db_path
+            ) 
     except Exception as e:
         logger.error(f"An error has occured: {e}")
         success = False
