@@ -150,6 +150,11 @@ def analyse_data(output_file: str, db_paths: List[str]):
                 dataset,
                 track
             )
+            # use the number of laps to correct the run's completion
+            number_of_laps = len(
+                [1 for (lapstart, lapend) in laps if violation_info.type == "none" or lapend <= violation_info.time]
+            )
+            violation_info.completion += number_of_laps * track.get_length()
             sim_run = analysis.SimulationRun(
                 violation_info,
                 laps
@@ -242,11 +247,6 @@ def plot(data_path, show=False):
 
     ax = axes[1]
     ax.set_title("Overall track completion")
-    # TODO: if laps, we need to register this as part
-    # of the completion
-    # TODO: for this, add funciton aggregate_completion(time)
-    # so we can just use the laptime for this. remove return value
-    # of completion from intersection check after doing this
     ax.set_xlabel("Distance (metres)")
     ax.hist(
         completions,
