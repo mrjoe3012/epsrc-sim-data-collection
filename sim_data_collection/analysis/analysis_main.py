@@ -7,14 +7,17 @@ from matplotlib.animation import FuncAnimation
 import time
 from rclpy.serialization import deserialize_message
 from eufs_msgs.msg import CarState
+from ugrdv_msgs.msg import VCUStatus, DriveRequest
 from scipy.spatial.transform import Rotation
 from eufs_msgs.msg import ConeArrayWithCovariance
 from typing import List, Tuple
+from sim_data_collection.analysis.vehicle_model import VehicleModel, KinematicBicycle
 import numpy as np
-import fcntl, json, signal
+import fcntl, json, signal, copy
 
 def visualise_data(db_paths: List[str],
-                   time_factor=15.0):
+                   time_factor=15.0,
+                   vehicle_model: VehicleModel | None = None):
     dataset = Dataset()
     figsize = (5,5)
     update_hz = 1000.0
@@ -34,9 +37,13 @@ def visualise_data(db_paths: List[str],
                 "SELECT timestamp, data FROM ground_truth_state ORDER BY timestamp ASC"
             ).fetchone()[0] / 1e3
             completions = []
+            vm_car_state = None # vehicle model's car state
+            vm_last_update = None
+            vm_reset_every = 150
+            vm_last_reset = None
 
             def anim_callback(i):
-                nonlocal t, completions
+                nonlocal t, completions, vm_car_state, vm_last_reset, vm_last_update
                 ax1.cla()
                 ax1.set_aspect("equal")
                 # figure out elapsed time since we last
@@ -45,6 +52,7 @@ def visualise_data(db_paths: List[str],
                 # use the time factor to figure out what
                 # time we should be visualising
                 sim_time = (start_time + time_factor*dt) * 1e3
+                if vm_last_update is None: vm_last_update = sim_time
                 # plot the track's centreline
                 ax1.plot(
                     [c[0] for c in track.centreline],
@@ -85,8 +93,66 @@ def visualise_data(db_paths: List[str],
                         WHERE timestamp < ? ORDER BY timestamp DESC",
                         (sim_time,)
                 ).fetchone()
-                if latest_car_pose is None: return
-                else: latest_car_pose = deserialize_message(latest_car_pose[1], CarState)
+                latest_vcu_status = dataset._connection.execute(
+                    "SELECT timestamp, data FROM vcu_status \
+                        WHERE timestamp < ? ORDER BY timestamp DESC",
+                        (sim_time,)
+                ).fetchone()
+                latest_drive_request = dataset._connection.execute(
+                    "SELECT timestamp, data FROM drive_request \
+                        WHERE timestamp < ? ORDER BY timestamp DESC",
+                        (sim_time,)
+                ).fetchone()
+                if latest_car_pose is None or (vehicle_model is not None and (latest_vcu_status is None or latest_drive_request is None)):
+                    return
+                else:
+                    latest_car_pose = deserialize_message(latest_car_pose[1], CarState)
+                    latest_vcu_status = deserialize_message(latest_vcu_status[1], VCUStatus)
+                    latest_drive_request = deserialize_message(latest_drive_request[1], DriveRequest)
+
+                # plot the vehicle model if we're simulating one
+                if vehicle_model is not None:
+                    if vm_car_state is None or (i - vm_last_reset) >= vm_reset_every:
+                        vm_last_reset = i
+                        vm_car_state = track.transform_car_pose(copy.deepcopy(latest_car_pose))
+                    vm_dt = sim_time - vm_last_update
+                    vm_last_update = sim_time
+                    vehicle_model.update_state({
+                        'steering_angle' : latest_vcu_status.steering_angle,
+                        'wheel_speeds' : [
+                            latest_vcu_status.wheel_speeds.fl_speed,
+                            latest_vcu_status.wheel_speeds.fr_speed,
+                            latest_vcu_status.wheel_speeds.rl_speed,
+                            latest_vcu_status.wheel_speeds.rr_speed,
+                        ],
+                        'steering_angle_request' : latest_drive_request.steering_angle,
+                        'torque_request' : latest_drive_request.axle_torque
+                    })
+                    dx_local, dy_local, dtheta = vehicle_model(vm_dt/1e3)
+                    vm_rot = Rotation.from_quat([
+                        vm_car_state.pose.pose.orientation.x,
+                        vm_car_state.pose.pose.orientation.y,
+                        vm_car_state.pose.pose.orientation.z,
+                        vm_car_state.pose.pose.orientation.w,
+                    ])
+                    heading = vm_rot.as_euler("XYZ")[2]
+                    dx = dx_local * np.cos(heading) - dy_local * np.sin(heading)
+                    dy = dx_local * np.sin(heading) + dy_local * np.cos(heading)
+                    dtheta_quat = Rotation.from_euler("XYZ", (0.0, 0.0, dtheta))
+                    vm_rot = dtheta_quat * vm_rot
+                    vm_car_state.pose.pose.orientation.x = vm_rot.as_quat()[0]
+                    vm_car_state.pose.pose.orientation.y = vm_rot.as_quat()[1]
+                    vm_car_state.pose.pose.orientation.z = vm_rot.as_quat()[2]
+                    vm_car_state.pose.pose.orientation.w = vm_rot.as_quat()[3]
+                    vm_car_state.pose.pose.position.x += float(dx)
+                    vm_car_state.pose.pose.position.y += float(dy)
+                    line = analysis.Line.make_line_from_car_state(vm_car_state)
+                    # plot the vehicle model's position as a line on the track
+                    ax1.plot(
+                        [line.sx, line.ex],
+                        [line.sy, line.ey],
+                        "-", linewidth=5, color="red"
+                    )
                 # plot the latest car pose as a line
                 # on the track (to vaguely resemble  car)
                 latest_car_pose = track.transform_car_pose(latest_car_pose)
@@ -292,7 +358,7 @@ def main():
     if verb == "visualise":
         db_paths = sys.argv[2:]
         logger.info(f"Analysis starting up. Visualising {len(db_paths)} databases.")
-        visualise_data(db_paths)
+        visualise_data(db_paths, vehicle_model=KinematicBicycle())
     elif verb == "analyse":
         output_filename = sys.argv[2]
         db_paths = sys.argv[3:]
