@@ -44,6 +44,7 @@ class KinematicBicycle(VehicleModel):
         self.max_steer = np.deg2rad(21.0)
         self.min_torque = 0.0
         self.max_torque = 185.0
+        self.friction = 50.0
         self.mass = 200.0
         self.wheel_radius = 0.26
         self.wheelbase = 1.53
@@ -76,12 +77,14 @@ class KinematicBicycle(VehicleModel):
         # update internal state
         state_derivatives = torch.tensor([
             (self.state[2] - self.state[0]) / delta_time,
-            self.state[3] / (self.wheel_radius * self.mass),
+            (1.0 / self.mass) * (2.0 * (self.state[3] / self.wheel_radius) - (self.friction * self.state[1])),
             0.0,
             0.0
         ], dtype=self.dtype)
+        print(f"{self.state[3]/self.wheel_radius} - {self.friction*self.state[1]}")
         self.state += state_derivatives * delta_time
         self.state[0] = max(self.min_steer, min(self.state[0], self.max_steer))
+        self.state[1] = max(0.0, self.state[1])
         # calculate deltas
         dx = delta_time * self.state[1]
         dy = 0.0
