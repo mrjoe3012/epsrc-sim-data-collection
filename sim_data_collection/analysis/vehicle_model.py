@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict, Any
+from pathlib import Path
+import epsrc_vehicle_model.lib as nn_lib
 import numpy as np
 import torch
 
@@ -84,4 +86,25 @@ class KinematicBicycle(VehicleModel):
         dx = delta_time * self.state[1]
         dy = 0.0
         dtheta = delta_time * self.state[1] * np.tan(self.state[0]) / self.wheelbase
+        return dx, dy, dtheta
+
+class NNVehicleModel(VehicleModel):
+    def __init__(self, model : str | Path):
+        model = Path(model)
+        self.model = torch.load(model)
+        self.model.eval()
+        self.x = torch.zeros((self.model._input_constraints.SIZE,), dtype=torch.float32, device="cuda:0")
+
+    def update_state(self, state: Dict[str, Any]) -> None:
+        self.x[0] = state.get("steering_angle", self.x[0])
+        self.x[1:5] = torch.tensor(state.get("wheel_speeds", self.x[1:5]), dtype=torch.float32)
+        self.x[5] = state.get("steering_angle_request", self.x[5])
+        self.x[6] = state.get("torque_reqeust", self.x[6])
+
+    def step(self, delta_time: float) -> Tuple[float, float, float]:
+        y = self.model(self.x) * delta_time
+        dx = y[0].item()
+        dy = y[1].item()
+        dtheta = y[2].item()
+        self.x[:5] += y[3:]
         return dx, dy, dtheta

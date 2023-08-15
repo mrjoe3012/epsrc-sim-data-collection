@@ -11,7 +11,7 @@ from ugrdv_msgs.msg import VCUStatus, DriveRequest
 from scipy.spatial.transform import Rotation
 from eufs_msgs.msg import ConeArrayWithCovariance
 from typing import List, Tuple
-from sim_data_collection.analysis.vehicle_model import VehicleModel, KinematicBicycle
+from sim_data_collection.analysis.vehicle_model import VehicleModel, KinematicBicycle, NNVehicleModel
 import numpy as np
 import fcntl, json, signal, copy
 
@@ -21,6 +21,7 @@ def visualise_data(db_paths: List[str],
     dataset = Dataset()
     figsize = (5,5)
     update_hz = 1000.0
+    time_factor = 3.0
     update_interval = 1.0 / update_hz
     plot_percentage = True
     for db_path in db_paths:
@@ -115,16 +116,18 @@ def visualise_data(db_paths: List[str],
                     if vm_car_state is None or (i - vm_last_reset) >= vm_reset_every:
                         vm_last_reset = i
                         vm_car_state = track.transform_car_pose(copy.deepcopy(latest_car_pose))
+                        vehicle_model.update_state({
+                            'steering_angle' : latest_vcu_status.steering_angle,
+                            'wheel_speeds' : [
+                                latest_vcu_status.wheel_speeds.fl_speed,
+                                latest_vcu_status.wheel_speeds.fr_speed,
+                                latest_vcu_status.wheel_speeds.rl_speed,
+                                latest_vcu_status.wheel_speeds.rr_speed,
+                            ],
+                        })
                     vm_dt = sim_time - vm_last_update
                     vm_last_update = sim_time
                     vehicle_model.update_state({
-                        'steering_angle' : latest_vcu_status.steering_angle,
-                        'wheel_speeds' : [
-                            latest_vcu_status.wheel_speeds.fl_speed,
-                            latest_vcu_status.wheel_speeds.fr_speed,
-                            latest_vcu_status.wheel_speeds.rl_speed,
-                            latest_vcu_status.wheel_speeds.rr_speed,
-                        ],
                         'steering_angle_request' : latest_drive_request.steering_angle,
                         'torque_request' : latest_drive_request.axle_torque
                     })
@@ -358,7 +361,8 @@ def main():
     if verb == "visualise":
         db_paths = sys.argv[2:]
         logger.info(f"Analysis starting up. Visualising {len(db_paths)} databases.")
-        visualise_data(db_paths, vehicle_model=KinematicBicycle())
+        visualise_data(db_paths, vehicle_model=NNVehicleModel("/home/joe/Downloads/testmodel.pt"))
+        # visualise_data(db_paths, vehicle_model=KinematicBicycle())
     elif verb == "analyse":
         output_filename = sys.argv[2]
         db_paths = sys.argv[3:]
