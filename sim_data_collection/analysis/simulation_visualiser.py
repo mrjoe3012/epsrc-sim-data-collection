@@ -12,13 +12,56 @@ import numpy as np
 import time, copy
 
 class VehicleModelState:
-    pass
+    def __init__(self, vehicle_model: VehicleModel):
+        self._vehicle_model = vehicle_model
+        self._car_state = None
+        self._last_update = None
+        self._last_reset = None
+        self._reset_every = 150
 
 class SimulationVisualiser:
     def __init__(self, db_paths: List[str], time_factor: float = 1.0,
                  vehicle_models: (List[VehicleModel] | None) = None):
+        self._time_factor = 3.0
         self._db_paths = db_paths
-        self._vehicle_models = vehicle_models
+        self._vehicle_models = [VehicleModelState(vm) for vm in vehicle_models]
+        self._vehicle_model_colours = [
+            "red",
+            "orange",
+            "yellow",
+            "green",
+            "pink"
+        ]
+
+    def _get_start_time(self, dataset: Dataset):
+        start_time = dataset._connection.execute(
+            "SELECT timestamp, data FROM ground_truth_state ORDER BY timestamp ASC"
+        ).fetchone()[0] / 1e3
+        return start_time
+
+    def _get_next_messages(self, dataset: Dataset, millis: float):
+        car_state = dataset._connection.execute(
+            "SELECT timestamp, data FROM ground_truth_state \
+                WHERE timestamp < ? ORDER BY timestamp DESC",
+                (millis,)
+        ).fetchone()
+        vcu_status = dataset._connection.execute(
+            "SELECT timestamp, data FROM vcu_status \
+                WHERE timestamp < ? ORDER BY timestamp DESC",
+                (millis,)
+        ).fetchone()
+        drive_request = dataset._connection.execute(
+            "SELECT timestamp, data FROM drive_request \
+                WHERE timestamp < ? ORDER BY timestamp DESC",
+                (millis,)
+        ).fetchone()
+        if car_state is not None:
+            car_state = deserialize_message(car_state[1], CarState)
+        if vcu_status is not None:
+            vcu_status = deserialize_message(vcu_status[1], VCUStatus)
+        if drive_request is not None:
+            drive_request = deserialize_message(drive_request[1], DriveRequest)
+        return car_state, vcu_status, drive_request
 
     ####################
     # public interface #
@@ -28,10 +71,11 @@ class SimulationVisualiser:
         dataset = Dataset()
         figsize = (5,5)
         update_hz = 1000.0
-        time_factor = 3.0
+        time_factor = self._time_factor
         update_interval = 1.0 / update_hz
         plot_percentage = True
         for db_path in self._db_paths:
+            self._vehicle_models = [VehicleModelState(vm._vehicle_model) for vm in self._vehicle_models]
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
             try:
                 dataset.open(db_path)
@@ -41,17 +85,11 @@ class SimulationVisualiser:
                     verbose = True
                 )
                 t = time.time()
-                start_time = dataset._connection.execute(
-                    "SELECT timestamp, data FROM ground_truth_state ORDER BY timestamp ASC"
-                ).fetchone()[0] / 1e3
+                start_time = self._get_start_time(dataset)
                 completions = []
-                vm_car_state = None # vehicle model's car state
-                vm_last_update = None
-                vm_reset_every = 150
-                vm_last_reset = None
 
                 def anim_callback(i):
-                    nonlocal t, completions, vm_car_state, vm_last_reset, vm_last_update
+                    nonlocal t, completions 
                     ax1.cla()
                     ax1.set_aspect("equal")
                     # figure out elapsed time since we last
@@ -60,7 +98,6 @@ class SimulationVisualiser:
                     # use the time factor to figure out what
                     # time we should be visualising
                     sim_time = (start_time + time_factor*dt) * 1e3
-                    if vm_last_update is None: vm_last_update = sim_time
                     # plot the track's centreline
                     ax1.plot(
                         [c[0] for c in track.centreline],
@@ -96,73 +133,61 @@ class SimulationVisualiser:
                     )
                     # find the next car pose to visualise
                     # using the scaled time
-                    latest_car_pose = dataset._connection.execute(
-                        "SELECT timestamp, data FROM ground_truth_state \
-                            WHERE timestamp < ? ORDER BY timestamp DESC",
-                            (sim_time,)
-                    ).fetchone()
-                    latest_vcu_status = dataset._connection.execute(
-                        "SELECT timestamp, data FROM vcu_status \
-                            WHERE timestamp < ? ORDER BY timestamp DESC",
-                            (sim_time,)
-                    ).fetchone()
-                    latest_drive_request = dataset._connection.execute(
-                        "SELECT timestamp, data FROM drive_request \
-                            WHERE timestamp < ? ORDER BY timestamp DESC",
-                            (sim_time,)
-                    ).fetchone()
-                    if latest_car_pose is None or (self._vehicle_models[0] is not None and (latest_vcu_status is None or latest_drive_request is None)):
+                    latest_car_pose, latest_vcu_status, latest_drive_request = \
+                        self._get_next_messages(dataset, sim_time)
+                    if latest_car_pose is None or \
+                        latest_vcu_status is None or \
+                        latest_drive_request is None:
                         return
-                    else:
-                        latest_car_pose = deserialize_message(latest_car_pose[1], CarState)
-                        latest_vcu_status = deserialize_message(latest_vcu_status[1], VCUStatus)
-                        latest_drive_request = deserialize_message(latest_drive_request[1], DriveRequest)
 
                     # plot the vehicle model if we're simulating one
-                    if self._vehicle_models[0] is not None:
-                        if vm_car_state is None or (i - vm_last_reset) >= vm_reset_every:
-                            vm_last_reset = i
-                            vm_car_state = track.transform_car_pose(copy.deepcopy(latest_car_pose))
-                            self._vehicle_models[0].update_state({
-                                'steering_angle' : latest_vcu_status.steering_angle,
-                                'wheel_speeds' : [
-                                    latest_vcu_status.wheel_speeds.fl_speed,
-                                    latest_vcu_status.wheel_speeds.fr_speed,
-                                    latest_vcu_status.wheel_speeds.rl_speed,
-                                    latest_vcu_status.wheel_speeds.rr_speed,
-                                ],
+                    if self._vehicle_models is not None:
+                        for vm_idx, vm in enumerate(self._vehicle_models):
+                            if vm._last_update is None: vm._last_update = sim_time
+                            if vm._last_reset is None: vm._last_reset = sim_time
+                            if vm._car_state is None or (i - vm._last_reset) >= vm._reset_every:
+                                vm._last_reset = i
+                                vm._car_state = track.transform_car_pose(copy.deepcopy(latest_car_pose))
+                                vm._vehicle_model.update_state({
+                                    'steering_angle' : latest_vcu_status.steering_angle,
+                                    'wheel_speeds' : [
+                                        latest_vcu_status.wheel_speeds.fl_speed,
+                                        latest_vcu_status.wheel_speeds.fr_speed,
+                                        latest_vcu_status.wheel_speeds.rl_speed,
+                                        latest_vcu_status.wheel_speeds.rr_speed,
+                                    ],
+                                })
+                            vm_dt = sim_time - vm._last_update
+                            vm._last_update = sim_time
+                            vm._vehicle_model.update_state({
+                                'steering_angle_request' : latest_drive_request.steering_angle,
+                                'torque_request' : latest_drive_request.axle_torque
                             })
-                        vm_dt = sim_time - vm_last_update
-                        vm_last_update = sim_time
-                        self._vehicle_models[0].update_state({
-                            'steering_angle_request' : latest_drive_request.steering_angle,
-                            'torque_request' : latest_drive_request.axle_torque
-                        })
-                        dx_local, dy_local, dtheta = self._vehicle_models[0](vm_dt/1e3)
-                        vm_rot = Rotation.from_quat([
-                            vm_car_state.pose.pose.orientation.x,
-                            vm_car_state.pose.pose.orientation.y,
-                            vm_car_state.pose.pose.orientation.z,
-                            vm_car_state.pose.pose.orientation.w,
-                        ])
-                        heading = vm_rot.as_euler("XYZ")[2]
-                        dx = dx_local * np.cos(heading) - dy_local * np.sin(heading)
-                        dy = dx_local * np.sin(heading) + dy_local * np.cos(heading)
-                        dtheta_quat = Rotation.from_euler("XYZ", (0.0, 0.0, dtheta))
-                        vm_rot = dtheta_quat * vm_rot
-                        vm_car_state.pose.pose.orientation.x = vm_rot.as_quat()[0]
-                        vm_car_state.pose.pose.orientation.y = vm_rot.as_quat()[1]
-                        vm_car_state.pose.pose.orientation.z = vm_rot.as_quat()[2]
-                        vm_car_state.pose.pose.orientation.w = vm_rot.as_quat()[3]
-                        vm_car_state.pose.pose.position.x += float(dx)
-                        vm_car_state.pose.pose.position.y += float(dy)
-                        line = analysis.Line.make_line_from_car_state(vm_car_state)
-                        # plot the vehicle model's position as a line on the track
-                        ax1.plot(
-                            [line.sx, line.ex],
-                            [line.sy, line.ey],
-                            "-", linewidth=5, color="red"
-                        )
+                            dx_local, dy_local, dtheta = vm._vehicle_model(vm_dt/1e3)
+                            vm_rot = Rotation.from_quat([
+                                vm._car_state.pose.pose.orientation.x,
+                                vm._car_state.pose.pose.orientation.y,
+                                vm._car_state.pose.pose.orientation.z,
+                                vm._car_state.pose.pose.orientation.w,
+                            ])
+                            heading = vm_rot.as_euler("XYZ")[2]
+                            dx = dx_local * np.cos(heading) - dy_local * np.sin(heading)
+                            dy = dx_local * np.sin(heading) + dy_local * np.cos(heading)
+                            dtheta_quat = Rotation.from_euler("XYZ", (0.0, 0.0, dtheta))
+                            vm_rot = dtheta_quat * vm_rot
+                            vm._car_state.pose.pose.orientation.x = vm_rot.as_quat()[0]
+                            vm._car_state.pose.pose.orientation.y = vm_rot.as_quat()[1]
+                            vm._car_state.pose.pose.orientation.z = vm_rot.as_quat()[2]
+                            vm._car_state.pose.pose.orientation.w = vm_rot.as_quat()[3]
+                            vm._car_state.pose.pose.position.x += float(dx)
+                            vm._car_state.pose.pose.position.y += float(dy)
+                            line = analysis.Line.make_line_from_car_state(vm._car_state)
+                            # plot the vehicle model's position as a line on the track
+                            ax1.plot(
+                                [line.sx, line.ex],
+                                [line.sy, line.ey],
+                                "-", linewidth=5, color=self._vehicle_model_colours[vm_idx]
+                            )
                     # plot the latest car pose as a line
                     # on the track (to vaguely resemble  car)
                     latest_car_pose = track.transform_car_pose(latest_car_pose)

@@ -18,8 +18,8 @@ import fcntl, json, signal, copy
 
 def visualise_data(db_paths: List[str],
                    time_factor=15.0,
-                   vehicle_model: VehicleModel | None = None):
-    vis = SimulationVisualiser(db_paths, time_factor, [vehicle_model])
+                   vehicle_model: List[VehicleModel] | None = None):
+    vis = SimulationVisualiser(db_paths, time_factor, vehicle_model)
     vis.visualise_all()
 
 def analyse_data(output_file: str, db_paths: List[str]):
@@ -188,8 +188,8 @@ def main():
     if verb == "visualise":
         db_paths = sys.argv[2:]
         logger.info(f"Analysis starting up. Visualising {len(db_paths)} databases.")
-        visualise_data(db_paths, vehicle_model=NNVehicleModel("/home/joe/Downloads/testmodel.pt"))
-        # visualise_data(db_paths, vehicle_model=KinematicBicycle())
+        visualise_data(db_paths, vehicle_model=[NNVehicleModel("/home/joe/Downloads/testmodel.pt"), KinematicBicycle()])
+        # visualise_data(db_paths, vehicle_model=[KinematicBicycle(), KinematicBicycle()])
     elif verb == "analyse":
         output_filename = sys.argv[2]
         db_paths = sys.argv[3:]
