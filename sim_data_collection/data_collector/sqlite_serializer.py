@@ -75,30 +75,12 @@ class SQLiteSerializer:
         );
         """,
         """
-        CREATE TABLE path_planning_path_velocity_request(
+        CREATE TABLE car_request(
             hash VARCHAR(32) PRIMARY KEY,
             timestamp INT NOT NULL,
             perception_cones VARCHAR(32),
             data BLOB,
             FOREIGN KEY (perception_cones) REFERENCES perception_cones(hash)
-        );
-        """,
-        """
-        CREATE TABLE mission_path_velocity_request(
-            hash VARCHAR(32) PRIMARY KEY,
-            timestamp INT NOT NULL,
-            path_planning_path_velocity_request VARCHAR(32),
-            data BLOB,
-            FOREIGN KEY (path_planning_path_velocity_request) REFERENCES path_planning_path_velocity_request(hash)
-        );
-        """,
-        """
-        CREATE TABLE car_request(
-            hash VARCHAR(32) PRIMARY KEY,
-            timestamp INT NOT NULL,
-            mission_path_velocity_request VARCHAR(32),
-            data BLOB,
-            FOREIGN KEY (mission_path_velocity_request) REFERENCES mission_path_velocity_request(hash)
         );
         """,
         """
@@ -126,8 +108,6 @@ class SQLiteSerializer:
             "drive_request" : self._serialize_drive_request,
             "car_request" : self._serialize_car_request,
             "vcu_status" : self._serialize_vcu_status,
-            "path_planning_path_velocity_request" : self._serialize_path_planning_path_velocity_request,
-            "mission_path_velocity_request" : self._serialize_mission_path_velocity_request,
             "perception_cones" : self._serialize_perception_cones,
             "ground_truth_cones" : self._serialize_ground_truth_cones,
             "ground_truth_state" : self._serialize_ground_truth_state,
@@ -146,7 +126,7 @@ class SQLiteSerializer:
         """
         params = (
             msg.meta.hash,
-            utils.rosTimestampToMillis(msg.header.stamp),
+            utils.rosTimestampToMillis(msg.ackermann.header.stamp),
             msg.meta.consumed_messages[0],
             msg.meta.consumed_messages[1],
             serialize_message(msg)
@@ -155,34 +135,8 @@ class SQLiteSerializer:
 
     def _serialize_car_request(self, msg):
         query = """
-        INSERT INTO car_request(hash, timestamp, mission_path_velocity_request, data)
+        INSERT INTO car_request(hash, timestamp, perception_cones, data)
         VALUES (?, ?, ?, ?);
-        """
-        params = (
-            msg.meta.hash,
-            utils.rosTimestampToMillis(msg.header.stamp),
-            msg.meta.consumed_messages[0],
-            serialize_message(msg)
-        )
-        self._connection.execute(query, params)
-
-    def _serialize_path_planning_path_velocity_request(self, msg):
-        query = """
-        INSERT INTO path_planning_path_velocity_request(hash, timestamp, perception_cones, data)
-        VALUES(?, ?, ?, ?);
-        """
-        params = (
-            msg.meta.hash,
-            utils.rosTimestampToMillis(msg.header.stamp),
-            msg.meta.consumed_messages[0],
-            serialize_message(msg)
-        )
-        self._connection.execute(query, params)
-
-    def _serialize_mission_path_velocity_request(self, msg):
-        query = """
-        INSERT INTO mission_path_velocity_request(hash, timestamp, path_planning_path_velocity_request, data)
-        VALUES(?, ?, ?, ?);
         """
         params = (
             msg.meta.hash,
@@ -229,24 +183,10 @@ class SQLiteSerializer:
         assert self._open == True
         queries = (
             (
-            "path_planning_path_velocity_request",
-            """
-            DELETE FROM path_planning_path_velocity_request
-            WHERE perception_cones NOT IN (SELECT hash FROM perception_cones);
-            """
-            ),
-            (
-            "mission_path_velocity_request",
-            """
-            DELETE FROM mission_path_velocity_request
-            WHERE path_planning_path_velocity_request NOT IN (SELECT hash FROM path_planning_path_velocity_request);
-            """
-            ),
-            (
             "car_request",
             """
             DELETE FROM car_request
-            WHERE mission_path_velocity_request NOT IN (SELECT hash FROM mission_path_velocity_request);
+            WHERE perception_cones NOT IN (SELECT hash FROM perception_cones);
             """
             ),
             (

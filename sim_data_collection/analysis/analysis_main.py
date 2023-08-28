@@ -16,6 +16,13 @@ from sim_data_collection.analysis.simulation_visualiser import SimulationVisuali
 import numpy as np
 import fcntl, json, signal, copy
 
+def evaluate(model_path: str, db_paths: List[str]) -> None:
+    nn = NNVehicleModel(model_path)
+    kinematic = KinematicBicycle()
+    analysis.evaluate_vehicle_models(
+        db_paths, [nn, kinematic], ["Neural Network", "Kinematic"]
+    )
+
 def visualise_data(db_paths: List[str],
                    time_factor=15.0,
                    vehicle_model: List[VehicleModel] | None = None):
@@ -171,6 +178,7 @@ def usage():
     print("ros2 run sim_data_collection analysis <output json> <db1> <db2> ...")
     print("ros2 run sim_data_collection visualise <db1> <db2> ...")
     print("ros2 run sim_data_collection plot <input json>")
+    print("ros2 run sim_data_collection evaluate <vehicle model neural network> <db1> <db2> ...")
 
 def main():
     signal.signal(
@@ -188,7 +196,7 @@ def main():
     if verb == "visualise":
         db_paths = sys.argv[2:]
         logger.info(f"Analysis starting up. Visualising {len(db_paths)} databases.")
-        visualise_data(db_paths, vehicle_model=[NNVehicleModel("/home/joe/Downloads/testmodel.pt"), KinematicBicycle()])
+        visualise_data(db_paths, vehicle_model=[NNVehicleModel("/home/joe/Downloads/testmodel2.pt"), KinematicBicycle()])
         # visualise_data(db_paths, vehicle_model=[KinematicBicycle(), KinematicBicycle()])
     elif verb == "analyse":
         output_filename = sys.argv[2]
@@ -199,6 +207,11 @@ def main():
         input_filename = sys.argv[2]
         logger.info(f"Analysis starting up. Visualising data from {input_filename}.")
         plot(input_filename, show=False)
+    elif verb == "evaluate":
+        model_path = sys.argv[2]
+        db_paths = sys.argv[3:]
+        logger.info(f"Analysis starting up. Evaluating {model_path} against KinematicBicycle using {len(db_paths)} databases.")
+        evaluate(model_path, db_paths)
     else:
         print(f"Unrecognised verb '{verb}'")
         usage()

@@ -43,14 +43,12 @@ class LiveDataCollector(RosNode):
             }
             return d
         self._messages = {
-            "drive_request" : _message_description("/ugrdv/cmd", ugrdv_msgs.DriveRequest),
-            "car_request" : _message_description("/ugrdv/car_request", ugrdv_msgs.CarRequest),
-            "path_planning_path_velocity_request" : _message_description("/ugrdv/path_velocity_request", ugrdv_msgs.PathVelocityRequest),
-            "mission_path_velocity_request" : _message_description("/ugrdv/mission_path_velocity_request", ugrdv_msgs.PathVelocityRequest),
-            "perception_cones" : _message_description("/ugrdv/perception/perception_cones", ugrdv_msgs.Cone3dArray),
+            "drive_request" : _message_description("/drive_request", ugrdv_msgs.DriveRequest),
+            "car_request" : _message_description("/car_request", ugrdv_msgs.CarRequest),
+            "perception_cones" : _message_description("/perception_cones", ugrdv_msgs.Cone3dArray),
             "ground_truth_cones" : _message_description("/ground_truth/cones", eufs_msgs.ConeArrayWithCovariance),
             "ground_truth_state" : _message_description("/ground_truth/state", eufs_msgs.CarState),
-            "vcu_status" : _message_description("/ugrdv/vcu_status", ugrdv_msgs.VCUStatus)
+            "vcu_status" : _message_description("/vcu_status", ugrdv_msgs.VCUStatus)
         }
 
     def _init_params(self):

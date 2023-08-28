@@ -1,15 +1,16 @@
-from sim_data_collection.analysis.dataset import Dataset
 import sim_data_collection.utils as utils
 import matplotlib.pyplot as plt
-import math
 import numpy as np
+from sim_data_collection.analysis.dataset import Dataset, DatasetIterator
+from sim_data_collection.analysis.vehicle_model import VehicleModel
 from pathlib import Path
 from ament_index_python import get_package_share_directory
 from eufs_msgs.msg import CarState
+from ugrdv_msgs.msg import VCUStatus, DriveRequest
 from rclpy.serialization import deserialize_message
 from scipy.spatial.transform import Rotation
-import copy
 from typing import List, Dict, Optional, Tuple
+import copy, math
 
 msg_ids = [
     "ground_truth_state",
@@ -718,3 +719,317 @@ def get_lap_times(dataset: Dataset, track: Track, min_lap_time = 60.0) -> List[T
         cur_intersection = t
 
     return laps
+
+def evaluate_vehicle_models(db_paths: List[str], vehicle_models: List[VehicleModel], vehicle_model_names: List[str]):
+    def get_next(dataset, time):
+        vcu_status = dataset._connection.execute(
+            "SELECT timestamp, data FROM vcu_status WHERE timestamp > ? ORDER BY timestamp ASC",
+            (time,)
+        ).fetchone()
+        drive_request = dataset._connection.execute(
+            "SELECT timestamp, data FROM drive_request WHERE timestamp > ? ORDER BY timestamp ASC",
+            (time,)
+        ).fetchone()
+        car_state = dataset._connection.execute(
+            "SELECT timestamp, data FROM ground_truth_state WHERE timestamp > ? ORDER BY timestamp ASC",
+            (time,)
+        ).fetchone()
+        if vcu_status is not None:
+            vcu_status = deserialize_message(vcu_status[1], VCUStatus)
+        if drive_request is not None:
+            drive_request = deserialize_message(drive_request[1], DriveRequest)
+        if car_state is not None:
+            car_state = deserialize_message(car_state[1], CarState)
+        return vcu_status, drive_request, car_state
+    steps = 10
+    step_size = 1 * 1e3
+    # dim 0: vehicle model index [0,len(vehicle_models))
+    # dim 1: step index [0,steps)
+    # dim 2: error index [0,2] 0=xpos 1=ypos 2=heading
+    # dim 3: row index (arbtrary)
+    data = [[[[], [], []] for j in range(steps)] for i in range(len(vehicle_models))]
+    for db_path in db_paths:
+        dataset = Dataset()
+        dataset.open(db_path)
+        # get starting time
+        time, end_time = dataset.get_start_and_end()
+        try:
+            while time + steps * step_size < end_time:
+                # get next messages for each step
+                for i in range(steps):
+                    t = time
+                    t_n = time + step_size * (i + 1)
+                    t_c = time ## TODO: keep track of current time and stream through to update vehicle model properly
+                    vcu_status, drive_request, car_state = get_next(dataset, t)
+                    _, _, car_state_n = get_next(dataset, t_n)
+                    heading_quat = Rotation.from_quat([
+                        car_state.pose.pose.orientation.x,
+                        car_state.pose.pose.orientation.y,
+                        car_state.pose.pose.orientation.z,
+                        car_state.pose.pose.orientation.w,
+                    ])
+                    heading = heading_quat.as_euler("XYZ")[2]
+                    heading_n_quat = Rotation.from_quat([
+                        car_state_n.pose.pose.orientation.x,
+                        car_state_n.pose.pose.orientation.y,
+                        car_state_n.pose.pose.orientation.z,
+                        car_state_n.pose.pose.orientation.w,
+                    ])
+                    dx_global = car_state.pose.pose.position.x - car_state_n.pose.pose.position.x
+                    dy_global = car_state.pose.pose.position.y - car_state_n.pose.pose.position.y
+                    dheading = np.rad2deg((heading_n_quat * heading_quat.inv()).as_euler("XYZ")[2])
+                    dx = dx_global * np.cos(-heading) - dy_global * np.sin(-heading)
+                    dy = dx_global * np.sin(-heading) + dy_global * np.cos(-heading)
+                    for j, vehicle_model in enumerate(vehicle_models):
+                        vehicle_model.reset()
+                        vehicle_model.update_state({
+                            'steering_angle' : vcu_status.steering_angle,
+                            'wheel_speeds' : [
+                                vcu_status.wheel_speeds.fl_speed,
+                                vcu_status.wheel_speeds.fr_speed,
+                                vcu_status.wheel_speeds.rl_speed,
+                                vcu_status.wheel_speeds.rr_speed,
+                            ],
+                            'steering_angle_request' : drive_request.ackermann.drive.steering_angle,
+                            'acceleration_request' : drive_request.ackermann.drive.acceleration
+                        })
+                        dx_pred, dy_pred, dheading_pred = vehicle_model((t_n - t) / 1e3)
+                        dx_err = dx - dx_pred
+                        dy_err = dy - dy_pred
+                        dheading_err = dheading - dheading_pred
+                        data[j][i][0].append(dx_err)
+                        data[j][i][1].append(dy_err)
+                        data[j][i][2].append(dheading_err)
+                time += step_size
+        finally:
+            dataset.close()
+    
+    data = np.array(data)
+
+    fig, axes = plt.subplots(
+        2, 2
+    )
+
+    fig.suptitle("Vehicle Model Evaluation")
+
+    for ax in axes.flat:
+        # ax.axis("equal")
+        ax.set_xlabel("Time (Seconds)")
+
+    axes[1,1].axis("off")
+    axes[0,0].set_title("X Position")
+    axes[0,1].set_title("Y Position")
+    axes[1,0].set_title("Heading")
+    axes[0,0].set_ylabel("RMSE (Metres)")
+    axes[0,1].set_ylabel("RMSE (Metres)")
+    axes[1,0].set_ylabel("RMSE (Degrees)")
+
+    for i, name in enumerate(vehicle_model_names):
+        rmse = np.sqrt(np.sum(np.square(data[i,:,:,:]), axis=2) / data.shape[-1])
+        x = [step_size * (i+1) * 1e-3 for i in range(steps)]
+        axes[0,0].plot(
+            x,
+            rmse[:,0],
+            "-"
+        )
+        axes[0,1].plot(
+            x,
+            rmse[:,1],
+            "-"
+        )
+        axes[1,0].plot(
+            x,
+            rmse[:,2],
+            "-"
+        )
+
+    for ax in axes.flat:
+        ax.legend(vehicle_model_names)
+
+    plt.show()
+    plt.close(fig)
+
+def evaluate_vehicle_models(db_paths: List[str], vehicle_models: List[VehicleModel], vehicle_model_names: List[str]):
+    def get_next(dataset: DatasetIterator) -> Tuple[CarState, VCUStatus, DriveRequest]:
+        result = [None, None, None]
+        indices = {
+            CarState : 0,
+            VCUStatus : 1,
+            DriveRequest : 2
+        }
+        try:
+            while not all(result):
+                type, timestamp, msg = next(dataset)
+                result[indices[type]] = (timestamp, msg)
+        except StopIteration as e:
+            pass
+        return tuple(result)
+    window_size = 5 * 1e3
+    # dim 0: vehicle model index
+    # dim 1: data 0=propragation time 1=x pos error 2=y pos error 3=heading error
+    # dim 2: row index
+    data = [[[] for i in range(4)] for i in range(len(vehicle_models))]
+    for db_path in db_paths:
+        dataset = Dataset()
+        dataset.open(db_path)
+        dataset_it = iter(dataset)
+        # get starting time
+        time, end_time = dataset.get_start_and_end()
+        try:
+            stop = False
+            window_start_time = time
+            window = []
+            while stop == False:
+                car_state, vcu_status, drive_request = get_next(dataset_it)
+                if not all((car_state, vcu_status, drive_request)):
+                    stop = True
+                else:
+                    timestamp = sum((car_state[0], vcu_status[0], drive_request[0])) / 3
+                    # now, when we update the window we should also calculate errors, resetting
+                    # the vehicle models upon creation of a new window
+                    if len(window) == 0 or timestamp - window_start_time > window_size:
+                        x = car_state[1].pose.pose.position.x
+                        y = car_state[1].pose.pose.position.y
+                        orientation = Rotation.from_quat([
+                            car_state[1].pose.pose.orientation.x,
+                            car_state[1].pose.pose.orientation.y,
+                            car_state[1].pose.pose.orientation.z,
+                            car_state[1].pose.pose.orientation.w,
+                        ])
+                        window = [{
+                            'timestamp' : timestamp,
+                            'car_state' : car_state[1],
+                            'drive_request' : drive_request[1],
+                            'vcu_status' : vcu_status[1],
+                            'x' : x,
+                            'y' : y,
+                            'orientation' : orientation,
+                            'model_states' : [
+                                { 'x' : x, 'y' : y, 'orientation' : orientation} for vm in vehicle_models
+                            ]
+                        }]
+                        window_start_time = timestamp
+                        for vehicle_model in vehicle_models:
+                            vehicle_model.reset()
+                            vehicle_model.update_state({
+                                'steering_angle' : vcu_status[1].steering_angle,
+                                'wheel_speeds' : [
+                                    vcu_status[1].wheel_speeds.fl_speed,
+                                    vcu_status[1].wheel_speeds.fr_speed,
+                                    vcu_status[1].wheel_speeds.rl_speed,
+                                    vcu_status[1].wheel_speeds.rr_speed,
+                                ]
+                            })
+                    else:
+                        # get current state and record it
+                        x = car_state[1].pose.pose.position.x
+                        y = car_state[1].pose.pose.position.y
+                        orientation = Rotation.from_quat([
+                            car_state[1].pose.pose.orientation.x,
+                            car_state[1].pose.pose.orientation.y,
+                            car_state[1].pose.pose.orientation.z,
+                            car_state[1].pose.pose.orientation.w,
+                        ])
+                        previous_data = window[-1]
+                        window.append({
+                            'timestamp' : timestamp,
+                            'car_state' : car_state[1],
+                            'drive_request' : drive_request[1],
+                            'vcu_status' : vcu_status[1],
+                            'x' : x,
+                            'y' : y,
+                            'orientation' : orientation,
+                            'model_states' : []
+                        })
+                        current_data = window[-1]
+                        # models states should be kept track of in the global frame, this should be what we're evaluating against
+                        # update vehicle model and compare against ground truth
+                        time_since_window_start = timestamp - window_start_time
+                        delta_time = (timestamp - previous_data['timestamp']) / 1e3
+                        for i, vehicle_model in enumerate(vehicle_models):
+                            vehicle_model.update_state({
+                                'acceleration_request' : previous_data['drive_request'].ackermann.drive.acceleration,
+                                'steering_angle_request' : previous_data['drive_request'].ackermann.drive.steering_angle
+                            })
+                            prev_model_state = previous_data['model_states'][i]
+                            dx_pred, dy_pred, dheading_pred = vehicle_model(delta_time) 
+                            # if i == 0:
+                            #     print("in: ", vehicle_model.x)
+                            #     print("out: ", dx_pred, dy_pred, dheading_pred)
+                            #     if abs(dx_pred) > 2:
+                            #         print("===================================")
+                            dheading_pred_quat = Rotation.from_euler("XYZ", [0.0,0.0,dheading_pred])
+                            heading = (prev_model_state['orientation'] * dheading_pred_quat).as_euler("XYZ")[2]
+                            dx_pred_global = dx_pred * np.cos(heading) - dy_pred * np.sin(heading)
+                            dy_pred_global = dx_pred * np.sin(heading) + dy_pred * np.cos(heading)
+                            new_model_state = {
+                                'x' : prev_model_state['x'] + dx_pred_global,
+                                'y' : prev_model_state['y'] + dy_pred_global,
+                                'orientation' : prev_model_state['orientation'] * dheading_pred_quat
+                            }
+                            x_err = x - new_model_state['x']
+                            y_err = y - new_model_state['y']
+                            heading_err = np.rad2deg((orientation * new_model_state['orientation'].inv()).as_euler("XYZ")[2])
+                            data[i][0].append(time_since_window_start / 1e3)
+                            data[i][1].append(x_err)
+                            data[i][2].append(y_err)
+                            data[i][3].append(heading_err)
+                            current_data['model_states'].append(new_model_state)
+        finally:
+            dataset.close()
+    
+    data = np.array(data)
+    num_data_points = data.shape[-1]
+
+    fig, axes = plt.subplots(
+        2, 2
+    )
+
+    fig.suptitle("Vehicle Model Evaluation")
+
+    for ax in axes.flat:
+        # ax.axis("equal")
+        ax.set_xlabel("Time (Seconds)")
+
+    axes[1,1].axis("off")
+    axes[0,0].set_title("X Position")
+    axes[0,1].set_title("Y Position")
+    axes[1,0].set_title("Heading")
+    axes[0,0].set_ylabel("RMSE (Metres)")
+    axes[0,1].set_ylabel("RMSE (Metres)")
+    axes[1,0].set_ylabel("RMSE (Degrees)")
+
+    for i, name in enumerate(vehicle_model_names):
+        x = data[i,0,:]
+        marker = "-"
+        bin_edges = np.histogram_bin_edges(x, 'auto')
+        n_bins = len(bin_edges)
+        indices = np.digitize(x, bin_edges, right=True)
+        rmse = np.zeros((n_bins,3), dtype=np.float32)
+        for j in range(n_bins):
+            bin_indices = indices == j
+            if not any(bin_indices): continue
+            bin_data = data[i,1:,bin_indices]
+            row = np.sqrt(np.mean(np.square(bin_data), axis=0))
+            rmse[j,:] = row 
+        axes[0,0].plot(
+            bin_edges,
+            rmse[:,0],
+            marker
+        )
+        axes[0,1].plot(
+            bin_edges,
+            rmse[:,1],
+            marker
+        )
+        axes[1,0].plot(
+            bin_edges,
+            rmse[:,2],
+            marker
+        )
+
+    for ax in axes.flat[:-1]:
+        ax.legend(vehicle_model_names)
+
+    plt.show()
+    plt.close(fig)

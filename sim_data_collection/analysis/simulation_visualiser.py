@@ -160,8 +160,8 @@ class SimulationVisualiser:
                             vm_dt = sim_time - vm._last_update
                             vm._last_update = sim_time
                             vm._vehicle_model.update_state({
-                                'steering_angle_request' : latest_drive_request.steering_angle,
-                                'torque_request' : latest_drive_request.axle_torque
+                                'steering_angle_request' : latest_drive_request.ackermann.drive.steering_angle,
+                                'acceleration_request' : latest_drive_request.ackermann.drive.acceleration
                             })
                             dx_local, dy_local, dtheta = vm._vehicle_model(vm_dt/1e3)
                             vm_rot = Rotation.from_quat([
