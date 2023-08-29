@@ -2,6 +2,7 @@ from typing import List, Tuple
 from ugrdv_msgs.msg import Cone3d, Cone3dArray
 import numpy as np
 import numpy.random as random
+import json
 
 class ConeColour:
     """
@@ -33,6 +34,19 @@ class Probabilities:
         self.distance = distance
         self.var_x = var_x
         self.var_y = var_y
+
+    @staticmethod
+    def from_json(filename):
+        with open(filename, "r") as f:
+            data = json.load(f)
+            probs = [
+                Probabilities(
+                    **{
+                        key : value for key, value in d.items()
+                    }
+                ) for d in data
+            ]
+        return probs
 
 class PerceptionOutput:
     def __init__(self, detections: List[Tuple[Cone3d, Cone3d]],

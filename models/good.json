@@ -1,0 +1,110 @@
+[
+  {
+    "detection": 0.4,
+    "colour_correct": 1.0,
+    "colour_incorrect": 0.0,
+    "false_positive": 0.05,
+    "var_x": 0.25,
+    "var_y": 0.4,
+    "distance": 1.0
+  },
+  {
+    "detection": 0.016,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.0,
+    "false_positive": 0.06,
+    "var_x": 0.25,
+    "var_y": 0.4,
+    "distance": 1.5
+  },
+  {
+    "detection": 0.66,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.0,
+    "false_positive": 0.03,
+    "var_x": 0.025,
+    "var_y": 0.0125,
+    "distance": 3.0
+  },
+  {
+    "detection": 0.9,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.0025,
+    "false_positive": 0.005,
+    "var_x": 0.025,
+    "var_y": 0.0125,
+    "distance": 4.5
+  },
+  {
+    "detection": 0.99,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.0025,
+    "false_positive": 0.01,
+    "var_x": 0.03,
+    "var_y": 0.0125,
+    "distance": 6.0
+  },
+  {
+    "detection": 0.99,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.0025,
+    "false_positive": 0.02,
+    "var_x": 0.005,
+    "var_y": 0.0125,
+    "distance": 7.5
+  },
+  {
+    "detection": 0.99,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.005,
+    "false_positive": 0.012,
+    "var_x": 0.06,
+    "var_y": 0.0125,
+    "distance": 9.0
+  },
+  {
+    "detection": 0.99,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.005,
+    "false_positive": 0.015,
+    "var_x": 0.07,
+    "var_y": 0.025,
+    "distance": 10.5
+  },
+  {
+    "detection": 0.99,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.005,
+    "false_positive": 0.0125,
+    "var_x": 0.1,
+    "var_y": 0.025,
+    "distance": 12.0
+  },
+  {
+    "detection": 0.99,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.01,
+    "false_positive": 0.0125,
+    "var_x": 0.1,
+    "var_y": 0.025,
+    "distance": 13.5
+  },
+  {
+    "detection": 0.99,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.01,
+    "false_positive": 0.02,
+    "var_x": 0.09,
+    "var_y": 0.025,
+    "distance": 15.0
+  },
+  {
+    "detection": 0.88,
+    "colour_correct": 0.99,
+    "colour_incorrect": 0.01,
+    "false_positive": 0.01,
+    "var_x": 0.09,
+    "var_y": 0.025,
+    "distance": 16.5
+  }
+]

@@ -3,6 +3,8 @@ from eufs_msgs.msg import ConeArrayWithCovariance, CarState, ConeWithCovariance
 from ugrdv_msgs.msg import Cone3dArray, Cone3d
 from scipy.spatial.transform import Rotation
 from typing import List, Tuple
+from ament_index_python import get_package_share_directory
+from pathlib import Path
 import math
 import numpy as np
 import sim_data_collection.perception_model.model as perception_model
@@ -13,12 +15,12 @@ class Node(ROSNode):
         # parameters
         self.declare_parameter("gt-cones-topic", "/ground_truth/track")
         self.declare_parameter("gt-car-state-topic", "/ground_truth/state")
-        self.declare_parameter("perception-cones-topic", "/ugrdv/perception/epsrc_cones")
+        self.declare_parameter("simulated-cones-topic", "/ugrdv/perception/epsrc_cones")
         self.declare_parameter("sensor-fov", 110.0)
         self.declare_parameter("sensor-range", 12.0)
         self.gt_cones_topic = self.get_parameter("gt-cones-topic").value
         self.gt_car_state_topic = self.get_parameter("gt-car-state-topic").value
-        self.perception_cones_topic = self.get_parameter("perception-cones-topic").value
+        self.perception_cones_topic = self.get_parameter("simulated-cones-topic").value
         self.sensor_fov = math.radians(self.get_parameter("sensor-fov").value)
         self.sensor_range = self.get_parameter("sensor-range").value
         # set up publishers and subscriptions
@@ -45,346 +47,15 @@ class Node(ROSNode):
         }
         self.last_car_state = None
         self.last_gt_cones = Cone3dArray()
-        self.declare_parameter("model", "realistic")
+        self.declare_parameter("perception-model", "realistic")
         model_name = self.get_parameter("model").value
         self.perception_model = self.load_model(model_name)
 
     def load_model(self, name):
         allowed_names = ["realistic", "poor", "good"]
         assert name in allowed_names
-        if name == "realistic":
-            probs = [
-                perception_model.Probabilities(
-                    detection=0.2,
-                    colour_correct=1.0,
-                    colour_incorrect=0.0,
-                    false_positive=0.13,
-                    var_x=0.5,
-                    var_y=0.8,
-                    distance=1.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.008,
-                    colour_correct=0.98,
-                    colour_incorrect=0.0,
-                    false_positive=0.13,
-                    var_x=0.5,
-                    var_y=0.8,
-                    distance=1.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.333,
-                    colour_correct=0.98,
-                    colour_incorrect=0.0,
-                    false_positive=0.07,
-                    var_x=0.05,
-                    var_y=0.025,
-                    distance=3.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.52,
-                    colour_correct=0.98,
-                    colour_incorrect=0.005,
-                    false_positive=0.01,
-                    var_x=0.05,
-                    var_y=0.025,
-                    distance=4.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.94,
-                    colour_correct=0.98,
-                    colour_incorrect=0.005,
-                    false_positive=0.02,
-                    var_x=0.07,
-                    var_y=0.025,
-                    distance=6.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.955,
-                    colour_correct=0.98,
-                    colour_incorrect=0.005,
-                    false_positive=0.04,
-                    var_x=0.01,
-                    var_y=0.025,
-                    distance=7.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.93,
-                    colour_correct=0.98,
-                    colour_incorrect=0.01,
-                    false_positive=0.024,
-                    var_x=0.125,
-                    var_y=0.025,
-                    distance=9.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.88,
-                    colour_correct=0.98,
-                    colour_incorrect=0.01,
-                    false_positive=0.03,
-                    var_x=0.15,
-                    var_y=0.05,
-                    distance=10.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.82,
-                    colour_correct=0.98,
-                    colour_incorrect=0.01,
-                    false_positive=0.025,
-                    var_x=0.2,
-                    var_y=0.05,
-                    distance=12.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.80,
-                    colour_correct=0.98,
-                    colour_incorrect=0.1,
-                    false_positive=0.025,
-                    var_x=0.2,
-                    var_y=0.05,
-                    distance=13.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.74,
-                    colour_correct=0.96,
-                    colour_incorrect=0.02,
-                    false_positive=0.04,
-                    var_x=0.17,
-                    var_y=0.05,
-                    distance=15.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.45,
-                    colour_correct=0.95,
-                    colour_incorrect=0.02,
-                    false_positive=0.214,
-                    var_x=0.17,
-                    var_y=0.05,
-                    distance=16.5
-                ),
-            ]
-        elif name == "poor":
-            probs = [
-                perception_model.Probabilities(
-                    detection=0.1,
-                    colour_correct=0.95,
-                    colour_incorrect=0.01,
-                    false_positive=0.26,
-                    var_x=1.0,
-                    var_y=1.6,
-                    distance=1.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.004,
-                    colour_correct=0.95,
-                    colour_incorrect=0.01,
-                    false_positive=0.26,
-                    var_x=1.0,
-                    var_y=1.6,
-                    distance=1.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.15,
-                    colour_correct=0.95,
-                    colour_incorrect=0.01,
-                    false_positive=0.14,
-                    var_x=0.1,
-                    var_y=0.05,
-                    distance=3.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.25,
-                    colour_correct=0.95,
-                    colour_incorrect=0.01,
-                    false_positive=0.02,
-                    var_x=0.1,
-                    var_y=0.05,
-                    distance=4.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.45,
-                    colour_correct=0.95,
-                    colour_incorrect=0.01,
-                    false_positive=0.04,
-                    var_x=0.14,
-                    var_y=0.05,
-                    distance=6.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.45,
-                    colour_correct=0.95,
-                    colour_incorrect=0.01,
-                    false_positive=0.08,
-                    var_x=0.02,
-                    var_y=0.05,
-                    distance=7.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.45,
-                    colour_correct=0.95,
-                    colour_incorrect=0.02,
-                    false_positive=0.048,
-                    var_x=0.25,
-                    var_y=0.05,
-                    distance=9.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.4,
-                    colour_correct=0.95,
-                    colour_incorrect=0.02,
-                    false_positive=0.06,
-                    var_x=0.3,
-                    var_y=0.1,
-                    distance=10.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.4,
-                    colour_correct=0.98,
-                    colour_incorrect=0.02,
-                    false_positive=0.05,
-                    var_x=0.4,
-                    var_y=0.1,
-                    distance=12.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.4,
-                    colour_correct=0.95,
-                    colour_incorrect=0.2,
-                    false_positive=0.05,
-                    var_x=0.4,
-                    var_y=0.1,
-                    distance=13.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.74,
-                    colour_correct=0.93,
-                    colour_incorrect=0.03,
-                    false_positive=0.08,
-                    var_x=0.34,
-                    var_y=0.1,
-                    distance=15.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.22,
-                    colour_correct=0.93,
-                    colour_incorrect=0.03,
-                    false_positive=0.42,
-                    var_x=0.34,
-                    var_y=0.1,
-                    distance=16.5
-                ),
-            ]
-        elif name == "good":
-            probs = [
-                perception_model.Probabilities(
-                    detection=0.4,
-                    colour_correct=1.0,
-                    colour_incorrect=0.0,
-                    false_positive=0.05,
-                    var_x=0.25,
-                    var_y=0.4,
-                    distance=1.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.016,
-                    colour_correct=0.99,
-                    colour_incorrect=0.0,
-                    false_positive=0.06,
-                    var_x=0.25,
-                    var_y=0.4,
-                    distance=1.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.66,
-                    colour_correct=0.99,
-                    colour_incorrect=0.0,
-                    false_positive=0.03,
-                    var_x=0.025,
-                    var_y=0.0125,
-                    distance=3.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.90,
-                    colour_correct=0.99,
-                    colour_incorrect=0.0025,
-                    false_positive=0.005,
-                    var_x=0.025,
-                    var_y=0.0125,
-                    distance=4.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.99,
-                    colour_correct=0.99,
-                    colour_incorrect=0.0025,
-                    false_positive=0.01,
-                    var_x=0.03,
-                    var_y=0.0125,
-                    distance=6.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.99,
-                    colour_correct=0.99,
-                    colour_incorrect=0.0025,
-                    false_positive=0.02,
-                    var_x=0.005,
-                    var_y=0.0125,
-                    distance=7.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.99,
-                    colour_correct=0.99,
-                    colour_incorrect=0.005,
-                    false_positive=0.012,
-                    var_x=0.06,
-                    var_y=0.0125,
-                    distance=9.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.99,
-                    colour_correct=0.99,
-                    colour_incorrect=0.005,
-                    false_positive=0.015,
-                    var_x=0.07,
-                    var_y=0.025,
-                    distance=10.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.99,
-                    colour_correct=0.99,
-                    colour_incorrect=0.005,
-                    false_positive=0.0125,
-                    var_x=0.1,
-                    var_y=0.025,
-                    distance=12.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.99,
-                    colour_correct=0.99,
-                    colour_incorrect=0.01,
-                    false_positive=0.0125,
-                    var_x=0.1,
-                    var_y=0.025,
-                    distance=13.5
-                ),
-                perception_model.Probabilities(
-                    detection=0.99,
-                    colour_correct=0.99,
-                    colour_incorrect=0.01,
-                    false_positive=0.02,
-                    var_x=0.09,
-                    var_y=0.025,
-                    distance=15.0
-                ),
-                perception_model.Probabilities(
-                    detection=0.88,
-                    colour_correct=0.99,
-                    colour_incorrect=0.01,
-                    false_positive=0.01,
-                    var_x=0.09,
-                    var_y=0.025,
-                    distance=16.5
-                ),
-            ]
+        filename = Path(get_package_share_directory("sim_data_collection")) / 'models' / (name + '.json')
+        probs = perception_model.Probabilities.from_json(filename)
         return perception_model.PerceptionModel(probs)
     
     def on_gt_cones(self, msg):
