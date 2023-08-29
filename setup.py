@@ -15,6 +15,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/models', ['models/good.json', 'models/realistic.json', 'models/poor.json']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

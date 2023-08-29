@@ -6,22 +6,32 @@ from typing import List, Tuple
 import math
 import numpy as np
 import sim_data_collection.perception_model.model as perception_model
-## TODO: parameterise the node
 
 class Node(ROSNode):
     def __init__(self):
         super().__init__("simulated_perception_node")
+        # parameters
+        self.declare_parameter("gt-cones-topic", "/ground_truth/track")
+        self.declare_parameter("gt-car-state-topic", "/ground_truth/state")
+        self.declare_parameter("perception-cones-topic", "/ugrdv/perception/epsrc_cones")
+        self.declare_parameter("sensor-fov", 110.0)
+        self.declare_parameter("sensor-range", 12.0)
+        self.gt_cones_topic = self.get_parameter("gt-cones-topic").value
+        self.gt_car_state_topic = self.get_parameter("gt-car-state-topic").value
+        self.perception_cones_topic = self.get_parameter("perception-cones-topic").value
+        self.sensor_fov = math.radians(self.get_parameter("sensor-fov").value)
+        self.sensor_range = self.get_parameter("sensor-range").value
         # set up publishers and subscriptions
         self.subs = {
             "ground_truth_cones" : self.create_subscription(
                 ConeArrayWithCovariance,
-                "/ground_truth/track",
+                self.gt_cones_topic,
                 self.on_gt_cones,
                 1
             ),
             "ground_truth_state" : self.create_subscription(
                 CarState,
-                "/ground_truth/state",
+                self.gt_car_state_topic,
                 self.on_gt_car_state,
                 1
             ),
@@ -29,20 +39,11 @@ class Node(ROSNode):
         self.pubs = {
             "simulated_perception" : self.create_publisher(
                 ConeArrayWithCovariance,
-                "/ugrdv/perception/epsrc_cones",
+                self.perception_cones_topic,
                 1
             )
         }
-        update_hz = 10
-        self.timer = self.create_timer(
-            1 / update_hz,
-            self.timer_callback
-        )
-        self.last_car_state = {
-            "x" : 0.0,
-            "y" : 0.0,
-            "yaw" : 0.0
-        }
+        self.last_car_state = None
         self.last_gt_cones = Cone3dArray()
         self.declare_parameter("model", "realistic")
         model_name = self.get_parameter("model").value
@@ -388,10 +389,13 @@ class Node(ROSNode):
     
     def on_gt_cones(self, msg):
         self.last_gt_cones = self.convert_eufs_cones(msg)
+        if self.last_car_state is None: return
+        self.publish()
 
     def on_gt_car_state(self, msg):
         x, y = msg.pose.pose.position.x, msg.pose.pose.position.y
         yaw = self.get_car_heading(msg)
+        if self.last_car_state is None: self.last_car_state = {}
         self.last_car_state["x"] = x
         self.last_car_state["y"] = y
         self.last_car_state["yaw"] = yaw
@@ -447,12 +451,9 @@ class Node(ROSNode):
                 new.unknown_color_cones.append(eufs)
         return new
 
-    def timer_callback(self):
-        self.publish()
-
     def publish(self):
-        fov = math.radians(110.0)
-        distance = 12.0
+        fov = self.sensor_fov
+        distance = self.sensor_range
         cropped_cones = self.crop_to_fov(
             self.last_gt_cones,
             self.last_car_state,
