@@ -48,7 +48,7 @@ class Node(ROSNode):
         self.last_car_state = None
         self.last_gt_cones = Cone3dArray()
         self.declare_parameter("perception-model", "realistic")
-        model_name = self.get_parameter("model").value
+        model_name = self.get_parameter("perception-model").value
         self.perception_model = self.load_model(model_name)
 
     def load_model(self, name):
