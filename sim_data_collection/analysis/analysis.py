@@ -17,8 +17,6 @@ msg_ids = [
     "ground_truth_cones",
     "perception_cones",
     "vcu_status",
-    "path_planning_path_velocity_request",
-    "mission_path_velocity_request",
     "car_request",
     "drive_request",
 ]
@@ -367,7 +365,7 @@ class BackwardsDetector:
         if completions_delta < -self._small_negative_threshold:
             if self._verbose: print(f"{last_time}: More backwards than forwards")
             if completions_delta < -self._large_negative_threshold * self._track_len:
-                if self._verbose: print(f"Likely that a lap was completed. Ignoring potential violadtion.")
+                if self._verbose: print(f"Likely that a lap was completed. Ignoring potential violation.")
             else:
                 if self._verbose: print(f"No lap completion in sight. Violation has occured.")
                 return (True, first_time)
