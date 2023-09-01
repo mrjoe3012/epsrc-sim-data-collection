@@ -49,7 +49,7 @@ class KinematicBicycle(VehicleModel):
     def __init__(self):
         self.min_steer = np.deg2rad(-21.0)
         self.max_steer = np.deg2rad(21.0)
-        self.friction = 50.0
+        self.friction = 0.2
         self.mass = 200.0
         self.wheel_radius = 0.26
         self.wheelbase = 1.53
@@ -82,7 +82,7 @@ class KinematicBicycle(VehicleModel):
         # update internal state
         state_derivatives = torch.tensor([
             (self.state[2] - self.state[0]) / delta_time,
-            (self.state[3] / self.mass) - (self.friction * self.state[1]),
+            self.state[3] - self.state[1] * self.friction,
             0.0,
             0.0
         ], dtype=self.dtype)
@@ -122,8 +122,8 @@ class NNVehicleModel(VehicleModel):
         dy = y[1].item()
         dtheta = y[2].item()
         self.x[:5] += y[3:]
+        self.x[:5] = torch.max(torch.zeros((5,), dtype=torch.float32, device="cuda:0"), torch.min(torch.full((5,), 100.0, dtype=torch.float32, device="cuda:0"), self.x[:5]))
         self.x[0] = max(self.min_steer, min(self.x[0], self.max_steer))
-        self.x[1:5] = torch.max(self.x[1:5], torch.zeros((4,), dtype=torch.float32, device="cuda:0"))
         return dx, dy, dtheta
 
     def reset(self) -> None: 
