@@ -6,15 +6,19 @@ import numpy as np
 import torch
 
 class VehicleModel:
-    def __init__(self):
+    def __init__(self, name: str):
         """
         Abstract vehicle model class. Subclasses should override update_state() method
         to consume new data and the step() method to provide new estimated.
+        :param name: A name for the vehicle model.
         """
-        pass
+        self._name = name
 
     def __call__(self, delta_time: float = 1.0):
         return self.step(delta_time)
+
+    def get_name(self) -> str:
+        return self._name
 
     @abstractmethod
     def update_state(self, state: Dict[str, Any]) -> None:
@@ -47,6 +51,7 @@ class VehicleModel:
 
 class KinematicBicycle(VehicleModel):
     def __init__(self):
+        super().__init__("Kinematic Bicycle")
         self.min_steer = np.deg2rad(-21.0)
         self.max_steer = np.deg2rad(21.0)
         self.friction = 0.2
@@ -103,6 +108,7 @@ class KinematicBicycle(VehicleModel):
 
 class NNVehicleModel(VehicleModel):
     def __init__(self, model : str | Path):
+        super().__init__("Neural Network")
         model = Path(model)
         self.model = torch.load(model)
         self.model.eval()

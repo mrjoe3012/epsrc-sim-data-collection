@@ -7,6 +7,7 @@ from ugrdv_msgs.msg import VCUStatus, DriveRequest
 from eufs_msgs.msg import CarState
 from scipy.spatial.transform import Rotation
 from matplotlib.animation import FuncAnimation
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import numpy as np
 import time, copy
@@ -77,6 +78,14 @@ class SimulationVisualiser:
         for db_path in self._db_paths:
             self._vehicle_models = [VehicleModelState(vm._vehicle_model) for vm in self._vehicle_models]
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+            legend_handles = []
+            legend_names = []
+            legend_handles.append(Line2D([0], [0], lw=2, color="blue"))
+            legend_names.append("Ground Truth")
+            for vm_idx, vm_state in enumerate(self._vehicle_models):
+                legend_handles.append(Line2D([0], [0], lw=2, color=self._vehicle_model_colours[vm_idx]))
+                legend_names.append(vm_state._vehicle_model.get_name())
+            fig.legend(legend_handles, legend_names)
             try:
                 dataset.open(db_path)
                 track = analysis.Track.track_from_db_path(db_path)
@@ -183,18 +192,20 @@ class SimulationVisualiser:
                             vm._car_state.pose.pose.position.y += float(dy)
                             line = analysis.Line.make_line_from_car_state(vm._car_state)
                             # plot the vehicle model's position as a line on the track
-                            ax1.plot(
+                            vm_handle = ax1.plot(
                                 [line.sx, line.ex],
                                 [line.sy, line.ey],
                                 "-", linewidth=5, color=self._vehicle_model_colours[vm_idx]
                             )
+                            legend_handles.append(Line2D([0], [0], lw=2, color=self._vehicle_model_colours[vm_idx]))
+                            legend_names.append(f"Prediction ({vm._vehicle_model.get_name()})")
                     # plot the latest car pose as a line
                     # on the track (to vaguely resemble  car)
                     latest_car_pose = track.transform_car_pose(latest_car_pose)
                     latest_car_pose_line = analysis.Line.make_line_from_car_state(latest_car_pose)
                     ax1.plot([latest_car_pose_line.sx, latest_car_pose_line.ex],
                                 [latest_car_pose_line.sy, latest_car_pose_line.ey],
-                                "-", linewidth=5)
+                                "-", linewidth=5, color="blue")
                     # visualise where the system thinks the car is
                     # by colouring the nearest centreline red
                     ax1.plot(
