@@ -22,7 +22,7 @@ class VehicleModelState:
 class SimulationVisualiser:
     def __init__(self, db_paths: List[str], time_factor: float = 1.0,
                  vehicle_models: (List[VehicleModel] | None) = None):
-        self._time_factor = 3.0
+        self._time_factor = time_factor
         self._db_paths = db_paths
         self._vehicle_models = [VehicleModelState(vm) for vm in vehicle_models]
         self._vehicle_model_colours = [

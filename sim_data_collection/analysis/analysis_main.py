@@ -24,9 +24,9 @@ def evaluate(model_path: str, db_paths: List[str]) -> None:
     )
 
 def visualise_data(db_paths: List[str],
-                   time_factor=15.0,
-                   vehicle_model: List[VehicleModel] | None = None):
-    vis = SimulationVisualiser(db_paths, time_factor, vehicle_model)
+                   time_factor=3.0,
+                   vehicle_models: List[VehicleModel] | None = None):
+    vis = SimulationVisualiser(db_paths, time_factor, vehicle_models)
     vis.visualise_all()
 
 def analyse_data(output_file: str, db_paths: List[str]):
@@ -176,7 +176,7 @@ def plot(data_path, show=False):
 
 def usage():
     print("ros2 run sim_data_collection analysis <output json> <db1> <db2> ...")
-    print("ros2 run sim_data_collection visualise <db1> <db2> ...")
+    print("ros2 run sim_data_collection visualise <vehicle model nn (optional)> <db1> <db2> ...")
     print("ros2 run sim_data_collection plot <input json>")
     print("ros2 run sim_data_collection evaluate <vehicle model neural network> <db1> <db2> ...")
 
@@ -195,9 +195,13 @@ def main():
     
     if verb == "visualise":
         db_paths = sys.argv[2:]
+        vehicle_models = [KinematicBicycle()]
+        if db_paths[0].endswith(".pt"): ## first arg is vehicle model nn
+            vehicle_model_path = db_paths[0]
+            db_paths = db_paths[1:]
+            vehicle_models.insert(0, NNVehicleModel(vehicle_model_path))
         logger.info(f"Analysis starting up. Visualising {len(db_paths)} databases.")
-        visualise_data(db_paths, vehicle_model=[NNVehicleModel("/home/joe/Downloads/testmodel2.pt"), KinematicBicycle()])
-        # visualise_data(db_paths, vehicle_model=[KinematicBicycle(), KinematicBicycle()])
+        visualise_data(db_paths, vehicle_models=vehicle_models)
     elif verb == "analyse":
         output_filename = sys.argv[2]
         db_paths = sys.argv[3:]
