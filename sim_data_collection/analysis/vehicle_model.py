@@ -115,12 +115,13 @@ class NNVehicleModel(VehicleModel):
         self.x = torch.zeros((self.model._input_constraints.SIZE,), dtype=torch.float32, device="cuda:0")
         self.min_steer = np.deg2rad(-21.0)
         self.max_steer = np.deg2rad(21.0)
+        self.max_rpm = 1000.0
 
     def update_state(self, state: Dict[str, Any]) -> None:
         self.x[0] = state.get("steering_angle", self.x[0])
         self.x[1:5] = torch.tensor(state.get("wheel_speeds", self.x[1:5]), dtype=torch.float32)
         self.x[5] = state.get("steering_angle_request", self.x[5])
-        self.x[6] = state.get("acceleration_reqeust", self.x[6])
+        self.x[6] = state.get("acceleration_request", self.x[6])
 
     def step(self, delta_time: float) -> Tuple[float, float, float]:
         y = self.model(self.x) * delta_time
@@ -128,7 +129,8 @@ class NNVehicleModel(VehicleModel):
         dy = y[1].item()
         dtheta = y[2].item()
         self.x[:5] += y[3:]
-        self.x[:5] = torch.max(torch.zeros((5,), dtype=torch.float32, device="cuda:0"), torch.min(torch.full((5,), 100.0, dtype=torch.float32, device="cuda:0"), self.x[:5]))
+        self.x[1:5] = torch.max(self.x[1:5], torch.zeros((4,), dtype=torch.float32, device="cuda:0"))
+        self.x[1:5] = torch.min(self.x[1:5], torch.full((4,), self.max_rpm, dtype=torch.float32, device="cuda:0"))
         self.x[0] = max(self.min_steer, min(self.x[0], self.max_steer))
         return dx, dy, dtheta
 
