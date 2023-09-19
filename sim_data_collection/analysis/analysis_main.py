@@ -175,10 +175,10 @@ def plot(data_path, show=False):
 
 
 def usage():
-    print("ros2 run sim_data_collection analysis <output json> <db1> <db2> ...")
-    print("ros2 run sim_data_collection visualise <vehicle model nn (optional)> <db1> <db2> ...")
-    print("ros2 run sim_data_collection plot <input json>")
-    print("ros2 run sim_data_collection evaluate <vehicle model neural network> <db1> <db2> ...")
+    print("ros2 run sim_data_collection analysis analyse <output json> <db1> <db2> ...")
+    print("ros2 run sim_data_collection analysis visualise <vehicle model nn (optional)> <db1> <db2> ...")
+    print("ros2 run sim_data_collection analysis plot <input json>")
+    print("ros2 run sim_data_collection analysis evaluate <vehicle model neural network> <db1> <db2> ...")
 
 def main():
     signal.signal(

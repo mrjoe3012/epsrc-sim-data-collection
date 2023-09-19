@@ -1029,5 +1029,5 @@ def evaluate_vehicle_models(db_paths: List[str], vehicle_models: List[VehicleMod
     for ax in axes.flat[:-1]:
         ax.legend(vehicle_model_names)
 
-    plt.show()
+    plt.savefig("vehicle_model_evaluation")
     plt.close(fig)

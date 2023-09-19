@@ -13,16 +13,16 @@ class Node(ROSNode):
     def __init__(self):
         super().__init__("simulated_perception_node")
         # parameters
-        self.declare_parameter("gt-cones-topic", "/ground_truth/track")
-        self.declare_parameter("gt-car-state-topic", "/ground_truth/state")
-        self.declare_parameter("simulated-cones-topic", "/ugrdv/perception/epsrc_cones")
-        self.declare_parameter("sensor-fov", 110.0)
-        self.declare_parameter("sensor-range", 12.0)
-        self.gt_cones_topic = self.get_parameter("gt-cones-topic").value
-        self.gt_car_state_topic = self.get_parameter("gt-car-state-topic").value
-        self.perception_cones_topic = self.get_parameter("simulated-cones-topic").value
-        self.sensor_fov = math.radians(self.get_parameter("sensor-fov").value)
-        self.sensor_range = self.get_parameter("sensor-range").value
+        self.declare_parameter("gt_cones_topic", "/ground_truth/track")
+        self.declare_parameter("gt_car_state_topic", "/ground_truth/state")
+        self.declare_parameter("simulated_cones_topic", "/ugrdv/perception/epsrc_cones")
+        self.declare_parameter("sensor_fov", 110.0)
+        self.declare_parameter("sensor_range", 12.0)
+        self.gt_cones_topic = self.get_parameter("gt_cones_topic").value
+        self.gt_car_state_topic = self.get_parameter("gt_car_state_topic").value
+        self.perception_cones_topic = self.get_parameter("simulated_cones_topic").value
+        self.sensor_fov = math.radians(self.get_parameter("sensor_fov").value)
+        self.sensor_range = self.get_parameter("sensor_range").value
         # set up publishers and subscriptions
         self.subs = {
             "ground_truth_cones" : self.create_subscription(
@@ -47,8 +47,8 @@ class Node(ROSNode):
         }
         self.last_car_state = None
         self.last_gt_cones = Cone3dArray()
-        self.declare_parameter("perception-model", "realistic")
-        model_name = self.get_parameter("perception-model").value
+        self.declare_parameter("perception_model", "realistic")
+        model_name = self.get_parameter("perception_model").value
         self.perception_model = self.load_model(model_name)
 
     def load_model(self, name):
