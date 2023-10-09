@@ -85,6 +85,8 @@ def analyse_data(output_file: str, db_paths: List[str]):
 
 def plot(data_path, show=False):
 
+    figsize = (8, 4.5)
+
     def show(title):
         if show == True:
             plt.title(title)
@@ -115,47 +117,78 @@ def plot(data_path, show=False):
     finished_with_backwards = len(backwards)
     finished_without_violation = len(success)
 
-    failure_time = [
+    failure_time = np.array([
         v.time for v in backwards + intersections
-    ]
+    ])
 
-    completions = [
+    completions = np.array([
         run.violation.completion for run in all_runs
-    ]
+    ])
 
     fig, axes = plt.subplots(
         1,
+        figsize=figsize
     )
 
     ax = axes
-    ax.set_ylabel("Number of runs")
-    ax.hist(
-        ["No violations" for i in range(finished_without_violation)] + ["Track intersection" for i in range(finished_with_intersection)] + ["Driving the wrong way" for i in range(finished_with_backwards)],
-        bins="auto"
+    ax.set_title("Simulation Outcomes")
+    ax.set_ylabel("Number of simulations")
+    ax.set_xlabel("Simulation outcome")
+    ax.bar(
+        ["No violations", "Track intersection", "Driving the wrong way"],
+        [finished_without_violation, finished_with_intersection, finished_with_backwards],
     ) 
+
+    for c in ax.containers:
+        ax.bar_label(c)
 
     show("violations")
 
     fig, axes = plt.subplots(
-        2, 1
+        2, 1,
+        figsize=figsize
     )
 
     ax = axes[0]
     ax.set_title("Time to first violation")
     ax.set_xlabel("Time (seconds)")
-    ax.hist(
-        failure_time,
-        bins="auto"
+    ax.set_xlim((0, 120))
+    ax.set_ylim((0, 10000))
+    # ax.hist(
+    #     failure_time,
+    #     bins=12
+    # )
+    ax.bar(
+        np.arange(5, 125, 10),
+        np.histogram(
+            failure_time,
+            np.arange(0, 130, 10),
+            (0, 120)
+        )[0],
+        width=10
     )
 
     ax = axes[1]
     ax.set_title("Overall track completion")
     ax.set_xlabel("Distance (metres)")
-    ax.hist(
-        completions,
-        bins="auto"
+    ax.set_xlim((0, 1000))
+    ax.set_ylim((0, 10000))
+    # ax.hist(
+    #     completions,
+    #     bins=12
+    # )
+    ax.bar(
+        np.arange(50, 1000, 100),
+        np.histogram(
+            completions,
+            np.arange(0, 1100, 100),
+        )[0],
+        width=100
     )
+    for c in axes[0].containers: axes[0].bar_label(c)
+    for c in axes[1].containers: axes[1].bar_label(c)
 
+    fig.tight_layout()
     show("completion")
 
     fig, axes = plt.subplots(
@@ -163,14 +196,18 @@ def plot(data_path, show=False):
     )
 
     ax = axes
+    ax.set_title("Violations Over Track Completion")
     ax.set_ylabel("Distance (metres)")
     ax.set_xlabel("Time (seconds)")
+    ax.set_xlim((0, 120))
+    ax.set_ylim((0, 1000))
     ax.plot(
         [v.time for v in backwards + intersections],
         [v.completion for v in backwards + intersections],
         "o"
     )
 
+    fig.tight_layout()
     show("intersection_completion")
 
 
