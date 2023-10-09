@@ -83,9 +83,10 @@ def analyse_data(output_file: str, db_paths: List[str]):
         f.write(filecontents)
         fcntl.flock(f, fcntl.F_UNLCK) 
 
-def plot(data_path, show=False):
-
+def plot(data_paths: list[str], labels: list[str], show=False):
+    assert len(data_paths) == len(labels)
     figsize = (8, 4.5)
+    num_files = len(labels)
 
     def show(title):
         if show == True:
@@ -94,36 +95,39 @@ def plot(data_path, show=False):
         else:
             plt.savefig(title)
 
-    with open(data_path, "r", encoding="ascii") as f:
-        data = json.load(f)
+    data = []
+
+    for data_path in data_paths:
+        with open(data_path, "r", encoding="ascii") as f:
+            data.append(json.load(f))
 
     all_runs = [
-        analysis.SimulationRun.from_dict(x) for x in data['sim_runs']
+        [analysis.SimulationRun.from_dict(x) for x in d['sim_runs']] for d in data
     ]
 
     intersections = [
-        run.violation for run in all_runs if run.violation.type == "intersection"
+        [run.violation for run in runs if run.violation.type == "intersection"] for runs in all_runs
     ]
 
     backwards = [
-        run.violation for run in all_runs if run.violation.type == "backwards"
+        [run.violation for run in runs if run.violation.type == "backwards"] for runs in all_runs
     ]
 
     success = [
-        run.violation for run in all_runs if run.violation.type == "none"
+        [run.violation for run in runs if run.violation.type == "none"] for runs in all_runs
     ]
 
-    finished_with_intersection = len(intersections)
-    finished_with_backwards = len(backwards)
-    finished_without_violation = len(success)
+    finished_with_intersection = [len(x) for x in intersections]
+    finished_with_backwards = [len(x) for x in backwards]
+    finished_without_violation = [len(x) for x in success]
 
-    failure_time = np.array([
-        v.time for v in backwards + intersections
-    ])
+    failure_time = [
+        np.array([v.time for v in b + i]) for b,i in zip(backwards, intersections)
+    ]
 
-    completions = np.array([
-        run.violation.completion for run in all_runs
-    ])
+    completions = [
+        np.array([run.violation.completion for run in runs]) for runs in all_runs
+    ]
 
     fig, axes = plt.subplots(
         1,
@@ -134,14 +138,21 @@ def plot(data_path, show=False):
     ax.set_title("Simulation Outcomes")
     ax.set_ylabel("Number of simulations")
     ax.set_xlabel("Simulation outcome")
-    ax.bar(
-        ["No violations", "Track intersection", "Driving the wrong way"],
-        [finished_without_violation, finished_with_intersection, finished_with_backwards],
-    ) 
 
-    for c in ax.containers:
-        ax.bar_label(c)
+    arrs = (finished_without_violation, finished_with_intersection)#, finished_with_backwards)
+    bar_labels = ("No violations", "Track intersection")#, "Driving the wrong way")
+    num_arrs = len(arrs)
+    for i, (arr, label) in enumerate(zip(arrs, bar_labels, strict=True)):
+        offset = i / num_arrs
+        bar = ax.bar(
+            labels,
+            arr,
+            align='center',
+            label=label
+        )
 
+    ax.legend(loc="best")
+    fig.tight_layout()
     show("violations")
 
     fig, axes = plt.subplots(
@@ -154,59 +165,59 @@ def plot(data_path, show=False):
     ax.set_xlabel("Time (seconds)")
     ax.set_xlim((0, 120))
     ax.set_ylim((0, 10000))
-    # ax.hist(
-    #     failure_time,
-    #     bins=12
-    # )
-    ax.bar(
-        np.arange(5, 125, 10),
-        np.histogram(
-            failure_time,
-            np.arange(0, 130, 10),
-            (0, 120)
-        )[0],
-        width=10
-    )
+    for i, f in enumerate(failure_time):
+        ax.bar(
+            np.arange(5, 125, 10),
+            np.histogram(
+                f,
+                np.arange(0, 130, 10),
+                (0, 120)
+            )[0],
+            width=10,
+            label=labels[i]
+        )
+    ax.legend(loc="best")
 
     ax = axes[1]
     ax.set_title("Overall track completion")
     ax.set_xlabel("Distance (metres)")
     ax.set_xlim((0, 1000))
     ax.set_ylim((0, 10000))
-    # ax.hist(
-    #     completions,
-    #     bins=12
-    # )
-    ax.bar(
-        np.arange(50, 1000, 100),
-        np.histogram(
-            completions,
-            np.arange(0, 1100, 100),
-        )[0],
-        width=100
-    )
-    for c in axes[0].containers: axes[0].bar_label(c)
-    for c in axes[1].containers: axes[1].bar_label(c)
-
+    for i, c in enumerate(completions):
+        ax.bar(
+            np.arange(50, 1000, 100),
+            np.histogram(
+                c,
+                np.arange(0, 1100, 100),
+            )[0],
+            width=100,
+            label=labels[i]
+        )
+    ax.legend(loc="best")
     fig.tight_layout()
     show("completion")
 
     fig, axes = plt.subplots(
-        1
+        1,
+        figsize=figsize
     )
 
     ax = axes
-    ax.set_title("Violations Over Track Completion")
+    ax.set_title("Track Completion Over Time")
     ax.set_ylabel("Distance (metres)")
     ax.set_xlabel("Time (seconds)")
     ax.set_xlim((0, 120))
-    ax.set_ylim((0, 1000))
-    ax.plot(
-        [v.time for v in backwards + intersections],
-        [v.completion for v in backwards + intersections],
-        "o"
-    )
-
+    ax.set_ylim((0, 500))
+    for l, b, i in zip(labels, backwards, intersections):
+        ax.plot(
+            [v.time for v in b + i],
+            [v.completion for v in b + i],
+            "o",
+            label=l,
+            alpha=0.4,
+            markersize=3
+        )
+    ax.legend(loc='best')
     fig.tight_layout()
     show("intersection_completion")
 
@@ -214,7 +225,7 @@ def plot(data_path, show=False):
 def usage():
     print("ros2 run sim_data_collection analysis analyse <output json> <db1> <db2> ...")
     print("ros2 run sim_data_collection analysis visualise <vehicle model nn (optional)> <db1> <db2> ...")
-    print("ros2 run sim_data_collection analysis plot <input json>")
+    print("ros2 run sim_data_collection analysis plot <input jsons> <json labels>")
     print("ros2 run sim_data_collection analysis evaluate <vehicle model neural network> <db1> <db2> ...")
 
 def main():
@@ -245,9 +256,13 @@ def main():
         logger.info(f"Analysis starting up. Analysing {len(db_paths)} databases.")
         analyse_data(output_filename, db_paths)
     elif verb == "plot":
-        input_filename = sys.argv[2]
-        logger.info(f"Analysis starting up. Visualising data from {input_filename}.")
-        plot(input_filename, show=False)
+        args = sys.argv[2:]
+        num_args = len(args)
+        assert num_args % 2 == 0, "Please enter as many labels as there are json input files. These will be used for adding a legend to the produced charts."
+        input_filenames = args[:num_args//2]
+        labels = args[num_args//2:]
+        logger.info(f"Analysis starting up. Visualising data from {input_filenames}.")
+        plot(input_filenames, labels, show=False)
     elif verb == "evaluate":
         model_path = sys.argv[2]
         db_paths = sys.argv[3:]
