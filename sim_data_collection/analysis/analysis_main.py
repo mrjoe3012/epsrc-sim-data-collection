@@ -137,7 +137,7 @@ def plot(data_paths: list[str], labels: list[str], show=False):
     ax = axes
     ax.set_title("Simulation Outcomes")
     ax.set_ylabel("Number of simulations")
-    ax.set_xlabel("Simulation outcome")
+    ax.set_xlabel("Perception profile")
 
     arrs = (finished_without_violation, finished_with_intersection)#, finished_with_backwards)
     bar_labels = ("No violations", "Track intersection")#, "Driving the wrong way")
@@ -163,6 +163,7 @@ def plot(data_paths: list[str], labels: list[str], show=False):
     ax = axes[0]
     ax.set_title("Time to first violation")
     ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("Number of simulations")
     ax.set_xlim((0, 120))
     ax.set_ylim((0, 10000))
     for i, f in enumerate(failure_time):
@@ -181,6 +182,7 @@ def plot(data_paths: list[str], labels: list[str], show=False):
     ax = axes[1]
     ax.set_title("Overall track completion")
     ax.set_xlabel("Distance (metres)")
+    ax.set_ylabel("Number of simulations")
     ax.set_xlim((0, 1000))
     ax.set_ylim((0, 10000))
     for i, c in enumerate(completions):
